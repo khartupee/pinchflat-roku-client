@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+    <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+
+    <children>
+        <!-- Header Title -->
+        <Label
+            id="headerLabel"
+            text="Pinchflat — Downloaded Videos"
+            translation="[60, 30]"
+            font="font:LargeBoldSystemFont" />
+
+        <!-- Left Side: Scrollable Video Title List -->
+        <LabelList
+            id="videoList"
+            translation="[60, 85]"
+            itemSize="[680, 48]"
+            itemSpacing="[0, 6]"
+            numRows="11"
+            focusable="true" />
+
+        <!-- Right Side: Poster Artwork Preview -->
+        <Poster
+            id="previewPoster"
+            translation="[770, 85]"
+            width="440"
+            height="247"
+            loadDisplayMode="toFit" />
+
+        <!-- Right Side: Selected Video Title & Description -->
+        <Label
+            id="previewTitle"
+            translation="[770, 345]"
+            width="440"
+            height="65"
+            wrap="true"
+            numLines="2"
+            font="font:MediumBoldSystemFont" />
+
+        <Label
+            id="previewDescription"
+            translation="[770, 420]"
+            width="440"
+            height="250"
+            wrap="true"
+            numLines="9"
+            font="font:SmallSystemFont" />
+
+        <!-- Fullscreen Native Video Player -->
+        <Video
+            id="videoPlayer"
+            translation="[0, 0]"
+            width="1280"
+            height="720"
+            visible="false" />
+    </children>
+</component>
+
