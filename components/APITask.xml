@@ -4,5 +4,8 @@
 
     <interface>
         <field id="content" type="array" />
+        <field id="actionRequest" type="string" />
+        <field id="actionType" type="string" />
+        <field id="actionVideoId" type="string" />
     </interface>
 </component>
