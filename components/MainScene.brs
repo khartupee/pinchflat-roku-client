@@ -233,7 +233,7 @@ sub showPostPlayDialog()
     dialog = CreateObject("roSGNode", "StandardMessageDialog")
     dialog.title = "Video Finished"
     dialog.message = "Delete and Ignore this video?"
-    dialog.buttons = ["Yes", "No"]
+    dialog.buttons = ["Delete & Ignore", "Keep Video"]
 
     dialog.addFields({
         itemIndex: m.currentPlayIndex
