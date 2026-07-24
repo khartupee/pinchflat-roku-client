@@ -7,6 +7,7 @@ sub init()
     m.previewPoster = m.top.findNode("previewPoster")
     m.previewTitle = m.top.findNode("previewTitle")
     m.previewDescription = m.top.findNode("previewDescription")
+    m.posterDelayTimer = m.top.findNode("posterDelayTimer")
 
     ' Load settings from registry
     loadSettings()
@@ -22,6 +23,10 @@ sub init()
         print "MainScene: 'videoList' node found and focused."
     else
         print "ERROR: Could not find 'videoList' node in MainScene.xml."
+    end if
+
+    if m.posterDelayTimer <> invalid
+        m.posterDelayTimer.observeField("fire", "onPosterDelayTimerFire")
     end if
 
     ' If no server URL configured, prompt user to set one
@@ -81,6 +86,17 @@ end sub
 
 sub onVideoFocused()
     if m.videoList = invalid or m.videoContent = invalid then return
+    
+    ' Postpone image fetching while scrolling.
+    ' Reset timer on every navigation event.
+    if m.posterDelayTimer <> invalid
+        m.posterDelayTimer.control = "STOP"
+        m.posterDelayTimer.control = "START"
+    end if
+end sub
+
+sub onPosterDelayTimerFire()
+    if m.videoList = invalid or m.videoContent = invalid then return
     focusedIndex = m.videoList.itemFocused
     if focusedIndex >= 0 and focusedIndex < m.videoContent.GetChildCount()
         itemNode = m.videoContent.GetChild(focusedIndex)
@@ -112,8 +128,8 @@ sub onVideoFocused()
     end if
 end sub
 
-sub onThumbnailLoaded()
-    result = m.apiTask.thumbnailResult
+sub onThumbnailLoaded(event as Object)
+    result = event.GetData()
     if result = invalid or result.id = invalid then return
 
     videoId = result.id
@@ -156,16 +172,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
 end function
 
 sub deleteVideoFromServer(itemIndex as Integer, videoId as String)
-    m.apiTask.actionType = "delete"
-    m.apiTask.actionVideoId = videoId
-    m.apiTask.actionRequest = "go"
+    m.apiTask.actionRequest = { type: "delete", videoId: videoId }
     removeVideoFromList(itemIndex)
 end sub
 
 sub deleteAndIgnoreVideoFromServer(itemIndex as Integer, videoId as String)
-    m.apiTask.actionType = "ignore"
-    m.apiTask.actionVideoId = videoId
-    m.apiTask.actionRequest = "go"
+    m.apiTask.actionRequest = { type: "ignore", videoId: videoId }
     removeVideoFromList(itemIndex)
 end sub
 

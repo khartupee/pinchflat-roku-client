@@ -56,9 +56,9 @@ sub run()
             if type(msg) = "roSGNodeEvent"
                 field = msg.getField()
                 if field = "actionRequest"
-                    onActionRequest()
+                    onActionRequest(msg)
                 else if field = "thumbnailRequest"
-                    onThumbnailRequest()
+                    onThumbnailRequest(msg)
                 end if
             end if
         end if
@@ -108,9 +108,12 @@ function cleanDescription(rawDesc as String) as String
     return firstParagraph
 end function
 
-sub onActionRequest()
-    actionType = m.top.actionType
-    videoId = m.top.actionVideoId
+sub onActionRequest(event as Object)
+    requestData = event.GetData()
+    if requestData = invalid then return
+
+    actionType = requestData.type
+    videoId = requestData.videoId
 
     if actionType = "delete"
         url = m.top.serverURL + "/api/v1/videos/" + videoId
@@ -131,8 +134,8 @@ sub onActionRequest()
     end if
 end sub
 
-sub onThumbnailRequest()
-    request = m.top.thumbnailRequest
+sub onThumbnailRequest(event as Object)
+    request = event.GetData()
     if request = invalid then return
 
     url = request.url

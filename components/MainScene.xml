@@ -53,6 +53,11 @@
             width="1280"
             height="720"
             visible="false" />
+
+        <!-- Poster Debounce Timer (Crucial for scrolling performance) -->
+        <Timer
+            id="posterDelayTimer"
+            duration="0.15"
+            repeat="false" />
     </children>
 </component>
-
