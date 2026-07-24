@@ -6,7 +6,7 @@ sub run()
     print "APITask: Starting feed fetch..."
     
     ' Fetch JSON API containing all videos
-    jsonUrl = "http://192.168.1.7:8945/api/v1/videos"
+    jsonUrl = m.top.serverURL + "/api/v1/videos"
     jsonTransfer = CreateObject("roUrlTransfer")
     jsonTransfer.SetUrl(jsonUrl)
     jsonResponse = jsonTransfer.GetToString()
@@ -22,10 +22,10 @@ sub run()
     for each video in parsedJson
         if video.title <> invalid and video.id <> invalid
             streamUrl = ""
-            if video.stream_url <> invalid then streamUrl = video.stream_url
+            if video.stream_url <> invalid then streamUrl = rewriteURL(video.stream_url)
             
             posterUrl = ""
-            if video.thumbnail_url <> invalid then posterUrl = video.thumbnail_url
+            if video.thumbnail_url <> invalid then posterUrl = rewriteURL(video.thumbnail_url)
 
             desc = ""
             if video.description <> invalid then desc = cleanDescription(video.description)
@@ -44,11 +44,12 @@ sub run()
     print "APITask: Total compiled videos ready to send: "; videoList.Count()
     m.top.content = videoList
 
-    ' Set up scoped observer for action requests (runs in Task thread)
+    ' Set up scoped observers for action and thumbnail requests (runs in Task thread)
     m.port = CreateObject("roMessagePort")
     m.top.observeFieldScoped("actionRequest", m.port)
+    m.top.observeFieldScoped("thumbnailRequest", m.port)
 
-    ' Keep Task alive to handle action requests
+    ' Keep Task alive to handle action and thumbnail requests
     while true
         msg = wait(0, m.port)
         if msg <> invalid
@@ -56,6 +57,8 @@ sub run()
                 field = msg.getField()
                 if field = "actionRequest"
                     onActionRequest()
+                else if field = "thumbnailRequest"
+                    onThumbnailRequest()
                 end if
             end if
         end if
@@ -110,7 +113,7 @@ sub onActionRequest()
     videoId = m.top.actionVideoId
 
     if actionType = "delete"
-        url = "http://192.168.1.7:8945/api/v1/videos/" + videoId
+        url = m.top.serverURL + "/api/v1/videos/" + videoId
         print "APITask: DELETE "; url
         request = CreateObject("roUrlTransfer")
         request.SetUrl(url)
@@ -118,7 +121,7 @@ sub onActionRequest()
         response = request.PostFromString("")
         print "APITask: DELETE response code: "; response
     else if actionType = "ignore"
-        url = "http://192.168.1.7:8945/api/v1/videos/" + videoId + "/ignore"
+        url = m.top.serverURL + "/api/v1/videos/" + videoId + "/ignore"
         print "APITask: POST "; url
         request = CreateObject("roUrlTransfer")
         request.SetUrl(url)
@@ -127,3 +130,42 @@ sub onActionRequest()
         print "APITask: POST response code: "; response
     end if
 end sub
+
+sub onThumbnailRequest()
+    request = m.top.thumbnailRequest
+    if request = invalid then return
+
+    url = request.url
+    videoId = request.id
+    if url = "" or url = invalid then return
+    if videoId = "" or videoId = invalid then return
+
+    localPath = "tmp:/thumb_" + videoId + ".jpg"
+    transfer = CreateObject("roUrlTransfer")
+    transfer.SetUrl(url)
+    transfer.GetToFile(localPath)
+
+    m.top.thumbnailResult = { localPath: localPath, id: videoId }
+end sub
+
+function rewriteURL(url as String) as String
+    serverURL = m.top.serverURL
+
+    ' Add http:// if no protocol specified
+    if Left(serverURL, 7) <> "http://" and Left(serverURL, 8) <> "https://"
+        serverURL = "http://" + serverURL
+    end if
+
+    ' Extract path from the original URL (everything after the host:port)
+    regex = CreateObject("roRegex", "^https?://[^/]+(/.*)$", "")
+    match = regex.Match(url)
+    if match.Count() > 1
+        path = match[1]
+        if Right(serverURL, 1) = "/"
+            serverURL = Left(serverURL, Len(serverURL) - 1)
+        end if
+        return serverURL + path
+    end if
+
+    return url
+end function
