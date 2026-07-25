@@ -1,6 +1,6 @@
 # Pinchflat Roku Client
 
-A native Roku TV channel client written in BrightScript and Roku SceneGraph (RSG) to browse, stream, and manage video libraries downloaded and indexed by your self-hosted **Pinchflat** server.
+A native Roku TV channel client written in BrightScript and Roku SceneGraph (RSG) to browse, stream, and manage video libraries downloaded and indexed by your self-hosted  **khartupee/pinchflat-roku Pinchflat** server.
 
 ---
 
