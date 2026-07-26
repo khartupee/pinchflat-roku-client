@@ -19,6 +19,19 @@
             numRows="11"
             focusable="true" />
 
+        <!-- Empty State Message -->
+        <Label
+            id="emptyStateLabel"
+            translation="[340, 300]"
+            width="600"
+            height="120"
+            wrap="true"
+            numLines="4"
+            font="font:MediumBoldSystemFont"
+            visible="false"
+            alignment="center"
+            text="" />
+
         <!-- Right Side: Poster Artwork Preview -->
         <Poster
             id="previewPoster"

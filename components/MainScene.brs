@@ -8,6 +8,7 @@ sub init()
     m.previewTitle = m.top.findNode("previewTitle")
     m.previewDescription = m.top.findNode("previewDescription")
     m.posterDelayTimer = m.top.findNode("posterDelayTimer")
+    m.emptyStateLabel = m.top.findNode("emptyStateLabel")
 
     ' Load settings from registry
     loadSettings()
@@ -43,6 +44,7 @@ sub loadFeed()
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")
     m.apiTask.observeField("thumbnailResult", "onThumbnailLoaded")
+    m.apiTask.observeField("errorMessage", "onAPIError")
     m.apiTask.serverURL = m.serverURL
     m.apiTask.control = "RUN"
 end sub
@@ -52,6 +54,10 @@ sub onFeedLoaded()
     newContent = m.apiTask.content
     if newContent <> invalid and newContent.Count() > 0
         print "MainScene: Received "; newContent.Count(); " items from APITask."
+
+        ' Hide empty state if showing
+        if m.emptyStateLabel <> invalid then m.emptyStateLabel.visible = false
+
         rootNode = CreateObject("roSGNode", "ContentNode")
         for each item in newContent
             node = rootNode.CreateChild("ContentNode")
@@ -73,6 +79,10 @@ sub onFeedLoaded()
         end if
     else
         print "MainScene WARNING: APITask returned empty or invalid content."
+        if m.emptyStateLabel <> invalid
+            m.emptyStateLabel.text = "No videos found on server" + Chr(10) + m.serverURL
+            m.emptyStateLabel.visible = true
+        end if
     end if
 end sub
 
@@ -125,6 +135,11 @@ sub onPosterDelayTimerFire()
                 end if
             end if
         end if
+    else
+        ' No items - clear the preview panel
+        if m.previewTitle <> invalid then m.previewTitle.text = ""
+        if m.previewDescription <> invalid then m.previewDescription.text = ""
+        if m.previewPoster <> invalid then m.previewPoster.uri = ""
     end if
 end sub
 
@@ -459,6 +474,38 @@ sub restartFeed()
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")
     m.apiTask.observeField("thumbnailResult", "onThumbnailLoaded")
+    m.apiTask.observeField("errorMessage", "onAPIError")
     m.apiTask.serverURL = m.serverURL
     m.apiTask.control = "RUN"
+end sub
+
+sub onAPIError()
+    errorMsg = m.apiTask.errorMessage
+    if errorMsg = "" or errorMsg = invalid then return
+
+    scene = m.top.getScene()
+    scene.dialog = invalid
+
+    dialog = CreateObject("roSGNode", "StandardMessageDialog")
+    dialog.title = "Connection Error"
+    dialog.message = [errorMsg]
+    dialog.buttons = ["Retry", "Change URL"]
+
+    dialog.observeField("buttonSelected", "onAPIErrorAction")
+    scene.dialog = dialog
+end sub
+
+sub onAPIErrorAction()
+    scene = m.top.getScene()
+    dialog = scene.dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    scene.dialog = invalid
+
+    if buttonIndex = 0
+        loadFeed()
+    else if buttonIndex = 1
+        showServerInputDialog()
+    end if
 end sub

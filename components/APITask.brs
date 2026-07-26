@@ -13,8 +13,22 @@ sub run()
     print "APITask: JSON response length: "; Len(jsonResponse)
     
     parsedJson = ParseJson(jsonResponse)
-    if parsedJson = invalid 
-        print "APITask ERROR: Failed to parse JSON API response"
+    if parsedJson = invalid or jsonResponse = ""
+        ' API call failed - check if server is reachable but running wrong version
+        checkTransfer = CreateObject("roUrlTransfer")
+        checkTransfer.SetUrl(m.top.serverURL + "/healthcheck")
+        checkResponse = checkTransfer.GetToString()
+
+        if checkResponse <> "" and checkResponse <> invalid
+            ' Server responded to healthcheck - it's Pinchflat but missing Roku API
+            errorMsg = "Connected to a Pinchflat server, but it needs to be upgraded to khartupee/pinchflat-roku to work with this client." + Chr(10) + Chr(10) + "Current server: " + m.top.serverURL
+        else
+            ' Server unreachable or not Pinchflat
+            errorMsg = "Could not connect to server at " + m.top.serverURL + Chr(10) + Chr(10) + "Please check your server URL in Settings."
+        end if
+
+        print "APITask ERROR: "; errorMsg
+        m.top.errorMessage = errorMsg
         parsedJson = []
     end if
 

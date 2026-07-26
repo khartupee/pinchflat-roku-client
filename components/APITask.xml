@@ -8,5 +8,6 @@
         <field id="serverURL" type="string" value="http://192.168.1.7:8945" />
         <field id="thumbnailRequest" type="assocarray" />
         <field id="thumbnailResult" type="assocarray" />
+        <field id="errorMessage" type="string" />
     </interface>
 </component>
