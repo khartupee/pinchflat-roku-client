@@ -16,6 +16,7 @@ sub init()
     ' Thumbnail cache: maps video ID to local file path
     m.thumbnailCache = {}
     m.feedLoaded = false
+    m.launchBeaconFired = false
 
     if m.videoList <> invalid
         m.videoList.setFocus(true)
@@ -29,6 +30,11 @@ sub init()
     if m.posterDelayTimer <> invalid
         m.posterDelayTimer.observeField("fire", "onPosterDelayTimerFire")
     end if
+
+    ' Deep linking: create InputTask to listen for roInput events
+    m.inputTask = CreateObject("roSGNode", "InputTask")
+    m.inputTask.observeField("inputData", "onDeepLinkInput")
+    m.inputTask.control = "RUN"
 
     ' If no server URL configured, prompt user to set one
     if m.serverURL = ""
@@ -76,6 +82,12 @@ sub onFeedLoaded()
             
             ' Set initial preview
             onVideoFocused()
+        end if
+
+        ' Fire AppLaunchComplete beacon (only once per launch)
+        if not m.launchBeaconFired
+            m.top.signalBeacon("AppLaunchComplete")
+            m.launchBeaconFired = true
         end if
     else
         print "MainScene WARNING: APITask returned empty or invalid content."
@@ -165,6 +177,27 @@ sub onThumbnailLoaded(event as Object)
             end if
         end if
     end if
+end sub
+
+sub onDeepLinkInput()
+    deeplink = m.inputTask.inputData
+    if deeplink = invalid then return
+    if deeplink.id = "" or deeplink.id = invalid then return
+
+    print "MainScene: Deep link received for contentID="; deeplink.id
+
+    if m.videoContent <> invalid
+        for i = 0 to m.videoContent.GetChildCount() - 1
+            childNode = m.videoContent.GetChild(i)
+            if childNode <> invalid and childNode.id.toStr() = deeplink.id.toStr()
+                print "MainScene: Deep link match found, playing video at index "; i
+                playVideo(i)
+                return
+            end if
+        end for
+    end if
+
+    print "MainScene: Deep link contentID not found: "; deeplink.id
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -413,6 +446,8 @@ sub showServerInputDialog()
     scene = m.top.getScene()
     scene.dialog = invalid
 
+    m.top.signalBeacon("AppDialogInitiate")
+
     dialog = CreateObject("roSGNode", "StandardKeyboardDialog")
     dialog.title = "Server Address (IP:port or hostname.example.com)"
     dialog.text = m.serverURL
@@ -430,6 +465,8 @@ sub onServerInputSelected()
 
     buttonIndex = dialog.buttonSelected
     scene.dialog = invalid
+
+    m.top.signalBeacon("AppDialogComplete")
 
     if buttonIndex = 0
         newURL = dialog.text

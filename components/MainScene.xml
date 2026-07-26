@@ -29,7 +29,7 @@
             numLines="4"
             font="font:MediumBoldSystemFont"
             visible="false"
-            alignment="center"
+            horizAlign="center"
             text="" />
 
         <!-- Right Side: Poster Artwork Preview -->
