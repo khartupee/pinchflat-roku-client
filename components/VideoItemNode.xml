@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="VideoItemNode" extends="ContentNode">
+    <interface>
+        <field id="playbackPosition" type="integer" value="0" />
+        <field id="durationSeconds" type="integer" value="0" />
+    </interface>
+</component>

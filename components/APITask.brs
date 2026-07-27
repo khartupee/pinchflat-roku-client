@@ -44,6 +44,12 @@ sub run()
             desc = ""
             if video.description <> invalid then desc = cleanDescription(video.description)
 
+            playPos = 0
+            if video.playback_position_seconds <> invalid then playPos = Int(video.playback_position_seconds)
+
+            vidDur = 0
+            if video.duration_seconds <> invalid then vidDur = Int(video.duration_seconds)
+
             videoList.Push({
                 title: video.title
                 url: streamUrl
@@ -51,6 +57,8 @@ sub run()
                 description: desc
                 SDPosterUrl: posterUrl
                 HDPosterUrl: posterUrl
+                playbackPosition: playPos
+                durationSeconds: vidDur
             })
         end if
     end for
@@ -145,6 +153,16 @@ sub onActionRequest(event as Object)
         request.SetRequest("POST")
         response = request.PostFromString("")
         print "APITask: POST response code: "; response
+    else if actionType = "save_progress"
+        position = requestData.position
+        if position = invalid then position = 0
+        url = m.top.serverURL + "/api/v1/videos/" + videoId + "/progress"
+        print "APITask: PATCH progress "; url; " position="; position
+        request = CreateObject("roUrlTransfer")
+        request.SetUrl(url)
+        request.SetRequest("PATCH")
+        request.AddHeader("Content-Type", "application/json")
+        response = request.PostFromString("{""position"":" + position.toStr() + "}")
     end if
 end sub
 
@@ -170,7 +188,7 @@ function rewriteURL(url as String) as String
 
     ' Add http:// if no protocol specified
     if Left(serverURL, 7) <> "http://" and Left(serverURL, 8) <> "https://"
-        serverURL = "http://" + serverURL
+        serverURL = "https://" + serverURL
     end if
 
     ' Extract path from the original URL (everything after the host:port)

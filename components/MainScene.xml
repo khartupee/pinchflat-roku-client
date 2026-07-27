@@ -72,5 +72,11 @@
             id="posterDelayTimer"
             duration="0.15"
             repeat="false" />
+
+        <!-- Periodic Position Save Timer (saves every 15s during playback) -->
+        <Timer
+            id="positionSaveTimer"
+            duration="15"
+            repeat="true" />
     </children>
 </component>

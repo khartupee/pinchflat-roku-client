@@ -8,6 +8,7 @@ sub init()
     m.previewTitle = m.top.findNode("previewTitle")
     m.previewDescription = m.top.findNode("previewDescription")
     m.posterDelayTimer = m.top.findNode("posterDelayTimer")
+    m.positionSaveTimer = m.top.findNode("positionSaveTimer")
     m.emptyStateLabel = m.top.findNode("emptyStateLabel")
 
     ' Load settings from registry
@@ -29,6 +30,10 @@ sub init()
 
     if m.posterDelayTimer <> invalid
         m.posterDelayTimer.observeField("fire", "onPosterDelayTimerFire")
+    end if
+
+    if m.positionSaveTimer <> invalid
+        m.positionSaveTimer.observeField("fire", "onPositionSaveTimerFire")
     end if
 
     ' Deep linking: create InputTask to listen for roInput events
@@ -66,13 +71,15 @@ sub onFeedLoaded()
 
         rootNode = CreateObject("roSGNode", "ContentNode")
         for each item in newContent
-            node = rootNode.CreateChild("ContentNode")
+            node = rootNode.CreateChild("VideoItemNode")
             node.title = item.title
             node.url = item.url
             node.id = item.id
             node.description = item.description
             node.SDPosterUrl = item.SDPosterUrl
             node.HDPosterUrl = item.HDPosterUrl
+            node.playbackPosition = item.playbackPosition
+            node.durationSeconds = item.durationSeconds
         end for
         
         m.videoContent = rootNode
@@ -206,6 +213,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         if m.videoPlayer <> invalid and m.videoPlayer.visible = true
             if key = "back"
                 print "Closing video player..."
+                if m.positionSaveTimer <> invalid then m.positionSaveTimer.control = "stop"
+                saveCurrentPosition()
                 m.videoPlayer.control = "stop"
                 m.videoPlayer.visible = false
                 m.videoList.setFocus(true)
@@ -218,6 +227,39 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     end if
     return handled
 end function
+
+sub saveCurrentPosition()
+    if m.videoPlayer = invalid or m.currentPlayId = invalid then return
+
+    position = m.videoPlayer.position
+    if position = invalid then position = 0
+    duration = 0
+    if m.videoContent <> invalid and m.currentPlayIndex <> invalid
+        itemNode = m.videoContent.GetChild(m.currentPlayIndex)
+        if itemNode <> invalid
+            duration = itemNode.durationSeconds
+            if duration = invalid then duration = 0
+        end if
+    end if
+
+    ' Only save if position is meaningful (> 10s) and not near the end (< 95%)
+    if position > 10 and (duration = 0 or position < duration * 0.95)
+        print "Saving playback position: "; position; "s for video "; m.currentPlayId
+        m.apiTask.actionRequest = { type: "save_progress", videoId: m.currentPlayId, position: Int(position) }
+
+        ' Update local node so UI reflects new position
+        if m.videoContent <> invalid and m.currentPlayIndex <> invalid
+            itemNode = m.videoContent.GetChild(m.currentPlayIndex)
+            if itemNode <> invalid
+                itemNode.playbackPosition = Int(position)
+            end if
+        end if
+    end if
+end sub
+
+sub onPositionSaveTimerFire()
+    saveCurrentPosition()
+end sub
 
 sub deleteVideoFromServer(itemIndex as Integer, videoId as String)
     m.apiTask.actionRequest = { type: "delete", videoId: videoId }
@@ -259,10 +301,81 @@ sub playVideo(itemIndex as Integer)
             m.currentPlayIndex = itemIndex
             m.currentPlayId = itemNode.id.toStr()
 
+            ' Check if we should offer resume
+            savedPos = itemNode.playbackPosition
+            duration = itemNode.durationSeconds
+            if savedPos = invalid then savedPos = 0
+            if duration = invalid then duration = 0
+
+            ' Only offer resume if position is > 10s and < 95% of duration
+            if savedPos > 10 and (duration = 0 or savedPos < duration * 0.95)
+                showResumeDialog(itemIndex, savedPos, duration)
+            else
+                startPlayback(itemIndex, 0)
+            end if
+        end if
+    end if
+end sub
+
+sub showResumeDialog(itemIndex as Integer, savedPos as Integer, duration as Integer)
+    scene = m.top.getScene()
+    scene.dialog = invalid
+
+    posMinutes = Int(savedPos / 60)
+    posSeconds = savedPos mod 60
+    posStr = posMinutes.toStr() + ":" + Right("0" + posSeconds.toStr(), 2)
+
+    dialog = CreateObject("roSGNode", "StandardMessageDialog")
+    dialog.title = "Resume Playback"
+    dialog.message = ["Resume from " + posStr + "?"]
+    dialog.buttons = ["Resume", "Start from Beginning", "Cancel"]
+
+    dialog.addFields({
+        itemIndex: itemIndex
+        savedPos: savedPos
+    })
+
+    dialog.observeField("buttonSelected", "onResumeDialogSelected")
+    scene.dialog = dialog
+end sub
+
+sub onResumeDialogSelected()
+    scene = m.top.getScene()
+    dialog = scene.dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    itemIndex = dialog.itemIndex
+    savedPos = dialog.savedPos
+
+    scene.dialog = invalid
+
+    if buttonIndex = 0
+        startPlayback(itemIndex, savedPos)
+    else if buttonIndex = 1
+        startPlayback(itemIndex, 0)
+    else
+        m.videoList.setFocus(true)
+    end if
+end sub
+
+sub startPlayback(itemIndex as Integer, startPosition as Integer)
+    if m.videoContent <> invalid and m.videoPlayer <> invalid
+        itemNode = m.videoContent.GetChild(itemIndex)
+        if itemNode <> invalid and itemNode.url <> "" and itemNode.url <> invalid
+            print "Starting playback at position: "; startPosition
+
+            ' Store current video info for post-play dialog
+            m.currentPlayIndex = itemIndex
+            m.currentPlayId = itemNode.id.toStr()
+
             videoContent = CreateObject("roSGNode", "ContentNode")
             videoContent.url = itemNode.url
             videoContent.title = itemNode.title
             videoContent.streamFormat = "mp4"
+            if startPosition > 0
+                videoContent.playStart = startPosition
+            end if
 
             m.videoPlayer.content = videoContent
             m.videoPlayer.visible = true
@@ -270,6 +383,10 @@ sub playVideo(itemIndex as Integer)
             m.videoPlayer.control = "play"
 
             m.videoPlayer.observeField("state", "onVideoPlayerStateChange")
+
+            if m.positionSaveTimer <> invalid
+                m.positionSaveTimer.control = "start"
+            end if
         end if
     end if
 end sub
@@ -279,10 +396,22 @@ sub onVideoPlayerStateChange()
         state = m.videoPlayer.state
         print "Video player state changed to: "; state
         if state = "finished"
+            if m.positionSaveTimer <> invalid then m.positionSaveTimer.control = "stop"
+            ' Video completed - clear playback position
+            if m.currentPlayId <> invalid
+                m.apiTask.actionRequest = { type: "save_progress", videoId: m.currentPlayId, position: 0 }
+                if m.videoContent <> invalid and m.currentPlayIndex <> invalid
+                    itemNode = m.videoContent.GetChild(m.currentPlayIndex)
+                    if itemNode <> invalid
+                        itemNode.playbackPosition = 0
+                    end if
+                end if
+            end if
             m.videoPlayer.control = "stop"
             m.videoPlayer.visible = false
             showPostPlayDialog()
         else if state = "error"
+            if m.positionSaveTimer <> invalid then m.positionSaveTimer.control = "stop"
             m.videoPlayer.control = "stop"
             m.videoPlayer.visible = false
             m.videoList.setFocus(true)
@@ -340,6 +469,17 @@ sub loadSettings()
         m.serverURL = sec.Read("serverURL")
     else
         m.serverURL = ""
+    end if
+
+    ' Ensure URL uses HTTPS (NGINX proxies redirect HTTP to HTTPS, which breaks PATCH)
+    if m.serverURL <> ""
+        if Left(m.serverURL, 8) = "https://"
+            ' Already HTTPS, good
+        else if Left(m.serverURL, 7) = "http://"
+            m.serverURL = "https://" + Right(m.serverURL, Len(m.serverURL) - 7)
+        else
+            m.serverURL = "https://" + m.serverURL
+        end if
     end if
 
     if sec.Exists("showPostPlayDialog")
@@ -478,6 +618,14 @@ sub onServerInputSelected()
         end if
 
         if newURL <> ""
+            ' Ensure HTTPS
+            if Left(newURL, 8) = "https://"
+                ' Already HTTPS
+            else if Left(newURL, 7) = "http://"
+                newURL = "https://" + Right(newURL, Len(newURL) - 7)
+            else
+                newURL = "https://" + newURL
+            end if
             m.serverURL = newURL
             saveSettings()
 
