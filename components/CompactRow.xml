@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CompactRow" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChanged" />
+    </interface>
+
+    <children>
+        <Label
+            id="headerLabel"
+            translation="[10, 4]"
+            width="660"
+            height="40"
+            font="font:MediumBoldSystemFont"
+            color="0x7C83FFFF"
+            visible="false" />
+
+        <Label
+            id="titleLabel"
+            translation="[10, 0]"
+            width="460"
+            height="48"
+            font="font:MediumBoldSystemFont"
+            color="0xE8E8F0FF"
+            vertAlign="center"
+            visible="false"
+            maxLines="1" />
+
+        <Label
+            id="durationLabel"
+            translation="[530, 4]"
+            width="140"
+            height="22"
+            font="font:SmallSystemFont"
+            color="0x55AA99FF"
+            horizAlign="right"
+            visible="false" />
+
+        <Label
+            id="dateLabel"
+            translation="[530, 26]"
+            width="140"
+            height="18"
+            font="font:SmallSystemFont"
+            color="0x8888A8FF"
+            horizAlign="right"
+            visible="false" />
+    </children>
+
+    <script type="text/brightscript">
+    <![CDATA[
+        sub init()
+            m.headerLabel = m.top.FindNode("headerLabel")
+            m.titleLabel = m.top.FindNode("titleLabel")
+            m.durationLabel = m.top.FindNode("durationLabel")
+            m.dateLabel = m.top.FindNode("dateLabel")
+        end sub
+
+        sub onContentChanged()
+            content = m.top.itemContent
+            if content = invalid then return
+
+            if content.isHeader = true
+                m.headerLabel.visible = true
+                m.headerLabel.text = content.title
+                m.titleLabel.visible = false
+                m.durationLabel.visible = false
+                m.dateLabel.visible = false
+            else
+                m.headerLabel.visible = false
+                m.titleLabel.visible = true
+                m.titleLabel.text = content.title
+
+                if content.durationSeconds <> invalid and content.durationSeconds > 0
+                    m.durationLabel.visible = true
+                    secs = content.durationSeconds
+                    hrs = secs / 3600
+                    mins = (secs Mod 3600) / 60
+                    s = secs Mod 60
+                    if hrs > 0
+                        durStr = hrs.ToStr() + ":" + Right("0" + mins.ToStr(), 2) + ":" + Right("0" + s.ToStr(), 2)
+                    else
+                        durStr = mins.ToStr() + ":" + Right("0" + s.ToStr(), 2)
+                    end if
+                    m.durationLabel.text = durStr
+                else
+                    m.durationLabel.visible = false
+                end if
+
+                if content.uploadDate <> invalid and content.uploadDate <> ""
+                    m.dateLabel.visible = true
+                    m.dateLabel.text = content.uploadDate
+                else
+                    m.dateLabel.visible = false
+                end if
+            end if
+        end sub
+    ]]>
+    </script>
+</component>

@@ -18,6 +18,7 @@ sub init()
     m.thumbnailCache = {}
     m.feedLoaded = false
     m.launchBeaconFired = false
+    m.rawVideoData = []
 
     if m.videoList <> invalid
         m.videoList.setFocus(true)
@@ -66,30 +67,13 @@ sub onFeedLoaded()
     if newContent <> invalid and newContent.Count() > 0
         print "MainScene: Received "; newContent.Count(); " items from APITask."
 
+        ' Cache raw data for layout switching
+        m.rawVideoData = newContent
+
         ' Hide empty state if showing
         if m.emptyStateLabel <> invalid then m.emptyStateLabel.visible = false
 
-        rootNode = CreateObject("roSGNode", "ContentNode")
-        for each item in newContent
-            node = rootNode.CreateChild("VideoItemNode")
-            node.title = item.title
-            node.url = item.url
-            node.id = item.id
-            node.description = item.description
-            node.SDPosterUrl = item.SDPosterUrl
-            node.HDPosterUrl = item.HDPosterUrl
-            node.playbackPosition = item.playbackPosition
-            node.durationSeconds = item.durationSeconds
-        end for
-        
-        m.videoContent = rootNode
-        if m.videoList <> invalid
-            m.videoList.content = m.videoContent
-            print "MainScene: Bound content to videoList node successfully."
-            
-            ' Set initial preview
-            onVideoFocused()
-        end if
+        buildContentTree()
 
         ' Fire AppLaunchComplete beacon (only once per launch)
         if not m.launchBeaconFired
@@ -105,17 +89,138 @@ sub onFeedLoaded()
     end if
 end sub
 
+sub buildContentTree()
+    if m.rawVideoData.Count() = 0 then return
+
+    rootNode = CreateObject("roSGNode", "ContentNode")
+
+    if m.layoutMode = "standard"
+        for each item in m.rawVideoData
+            node = createVideoNode(rootNode, item)
+        end for
+        if m.videoList <> invalid
+            m.videoList.itemComponentName = ""
+        end if
+    else if m.layoutMode = "grouped"
+        sortedData = sortAndGroupData(m.rawVideoData)
+        currentSource = ""
+        for each item in sortedData
+            if item.sourceName <> currentSource and item.sourceName <> ""
+                currentSource = item.sourceName
+                headerNode = rootNode.CreateChild("VideoItemNode")
+                headerNode.title = currentSource
+                headerNode.isHeader = true
+            end if
+            createVideoNode(rootNode, item)
+        end for
+        if m.videoList <> invalid
+            m.videoList.itemComponentName = "CompactRow"
+        end if
+    else if m.layoutMode = "compact"
+        sortedData = sortAndGroupData(m.rawVideoData)
+        currentSource = ""
+        for each item in sortedData
+            if item.sourceName <> currentSource and item.sourceName <> ""
+                currentSource = item.sourceName
+                headerNode = rootNode.CreateChild("VideoItemNode")
+                headerNode.title = currentSource
+                headerNode.isHeader = true
+            end if
+            createVideoNode(rootNode, item)
+        end for
+        if m.videoList <> invalid
+            m.videoList.itemComponentName = "CompactRow"
+        end if
+    end if
+
+    m.videoContent = rootNode
+    if m.videoList <> invalid
+        m.videoList.content = m.videoContent
+        print "MainScene: Bound content to videoList node successfully."
+
+        ' Set initial preview
+        onVideoFocused()
+    end if
+end sub
+
+sub createVideoNode(parent as Object, item as Object)
+    node = parent.CreateChild("VideoItemNode")
+    node.title = item.title
+    node.url = item.url
+    node.id = item.id
+    node.description = item.description
+    node.SDPosterUrl = item.SDPosterUrl
+    node.HDPosterUrl = item.HDPosterUrl
+    node.playbackPosition = item.playbackPosition
+    node.durationSeconds = item.durationSeconds
+    node.sourceName = item.sourceName
+    node.uploadDate = item.uploadDate
+    return node
+end sub
+
+function sortAndGroupData(data as Object) as Object
+    if data.Count() = 0 then return data
+    ' Copy the array so we don't sort the cached original
+    sorted = []
+    for each item in data
+        sorted.Push(item)
+    end for
+    sorted.SortBy("sourceName")
+    return sorted
+end function
+
 sub onVideoSelected()
     if m.videoList = invalid then return
     selectedIndex = m.videoList.itemSelected
     if selectedIndex >= 0
-        playVideo(selectedIndex)
+        videoIndex = findVideoIndex(selectedIndex)
+        if videoIndex >= 0
+            playVideo(videoIndex)
+        end if
     end if
 end sub
 
+function findVideoIndex(contentIndex as Integer) as Integer
+    if m.videoContent = invalid then return -1
+    if contentIndex < 0 or contentIndex >= m.videoContent.GetChildCount() then return -1
+    node = m.videoContent.GetChild(contentIndex)
+    if node <> invalid and node.isHeader <> true
+        return contentIndex
+    end if
+    return -1
+end function
+
+function findNextVideoIndex(fromIndex as Integer, direction as Integer) as Integer
+    if m.videoContent = invalid then return -1
+    count = m.videoContent.GetChildCount()
+    i = fromIndex + direction
+    while i >= 0 and i < count
+        node = m.videoContent.GetChild(i)
+        if node <> invalid and node.isHeader <> true
+            return i
+        end if
+        i = i + direction
+    end while
+    return -1
+end function
+
 sub onVideoFocused()
     if m.videoList = invalid or m.videoContent = invalid then return
-    
+
+    ' Skip header items when focusing
+    focusedIndex = m.videoList.itemFocused
+    if focusedIndex >= 0 and focusedIndex < m.videoContent.GetChildCount()
+        itemNode = m.videoContent.GetChild(focusedIndex)
+        if itemNode <> invalid and itemNode.isHeader = true
+            ' Jump to next video item
+            nextIndex = findNextVideoIndex(focusedIndex, 1)
+            if nextIndex >= 0
+                m.videoList.jumpToItem = nextIndex
+            end if
+            return
+        end if
+    end if
+
     ' Postpone image fetching while scrolling.
     ' Reset timer on every navigation event.
     if m.posterDelayTimer <> invalid
@@ -129,7 +234,7 @@ sub onPosterDelayTimerFire()
     focusedIndex = m.videoList.itemFocused
     if focusedIndex >= 0 and focusedIndex < m.videoContent.GetChildCount()
         itemNode = m.videoContent.GetChild(focusedIndex)
-        if itemNode <> invalid
+        if itemNode <> invalid and itemNode.isHeader <> true
             if m.previewTitle <> invalid
                 m.previewTitle.text = itemNode.title
             end if
@@ -153,6 +258,11 @@ sub onPosterDelayTimerFire()
                     m.apiTask.thumbnailRequest = { url: itemNode.SDPosterUrl, id: videoId }
                 end if
             end if
+        else
+            ' Header item or invalid - clear preview
+            if m.previewTitle <> invalid then m.previewTitle.text = ""
+            if m.previewDescription <> invalid then m.previewDescription.text = ""
+            if m.previewPoster <> invalid then m.previewPoster.uri = ""
         end if
     else
         ' No items - clear the preview panel
@@ -490,15 +600,24 @@ sub loadSettings()
         sec.Flush()
     end if
 
-    print "MainScene: Loaded settings - serverURL='"; m.serverURL; "' showPostPlayDialog="; m.showPostPlayDialogSetting
+    if sec.Exists("layoutMode")
+        m.layoutMode = sec.Read("layoutMode")
+    else
+        m.layoutMode = "standard"
+        sec.Write("layoutMode", "standard")
+        sec.Flush()
+    end if
+
+    print "MainScene: Loaded settings - serverURL='"; m.serverURL; "' showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode
 end sub
 
 sub saveSettings()
     sec = CreateObject("roRegistrySection", "AppSettings")
     sec.Write("serverURL", m.serverURL)
     sec.Write("showPostPlayDialog", m.showPostPlayDialogSetting.toStr())
+    sec.Write("layoutMode", m.layoutMode)
     sec.Flush()
-    print "MainScene: Saved settings - serverURL="; m.serverURL; " showPostPlayDialog="; m.showPostPlayDialogSetting
+    print "MainScene: Saved settings - serverURL="; m.serverURL; " showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode
 end sub
 
 sub showOptionsMenu()
@@ -560,8 +679,12 @@ sub showSettingsDialog()
     postPlayStatus = "ON"
     if not m.showPostPlayDialogSetting then postPlayStatus = "OFF"
 
-    dialog.message = ["Server: " + m.serverURL, "Video Finished Dialog: " + postPlayStatus]
-    dialog.buttons = ["Change Server Address", "Toggle Video Finished Dialog", "Close"]
+    layoutNames = { standard: "Standard", grouped: "Grouped", compact: "Compact" }
+    layoutLabel = layoutNames[m.layoutMode]
+    if layoutLabel = invalid then layoutLabel = "Standard"
+
+    dialog.message = ["Server: " + m.serverURL, "Video Finished Dialog: " + postPlayStatus, "Layout: " + layoutLabel]
+    dialog.buttons = ["Change Server Address", "Toggle Video Finished Dialog", "Change Layout", "Close"]
 
     dialog.observeField("buttonSelected", "onSettingsSelected")
     scene.dialog = dialog
@@ -579,6 +702,8 @@ sub onSettingsSelected()
         showServerInputDialog()
     else if buttonIndex = 1
         togglePostPlayDialog()
+    else if buttonIndex = 2
+        toggleLayoutMode()
     end if
 end sub
 
@@ -650,6 +775,27 @@ end sub
 sub togglePostPlayDialog()
     m.showPostPlayDialogSetting = not m.showPostPlayDialogSetting
     saveSettings()
+    showSettingsDialog()
+end sub
+
+sub toggleLayoutMode()
+    modes = ["standard", "grouped", "compact"]
+    currentIndex = 0
+    for i = 0 to modes.Count() - 1
+        if modes[i] = m.layoutMode
+            currentIndex = i
+            exit for
+        end if
+    end for
+    nextIndex = (currentIndex + 1) Mod modes.Count()
+    m.layoutMode = modes[nextIndex]
+    saveSettings()
+
+    ' Rebuild the list with new layout
+    if m.rawVideoData.Count() > 0
+        buildContentTree()
+    end if
+
     showSettingsDialog()
 end sub
 
