@@ -19,9 +19,11 @@ sub init()
     m.feedLoaded = false
     m.launchBeaconFired = false
     m.rawVideoData = []
+    m.lastFocusedIndex = -1
 
     if m.videoList <> invalid
         m.videoList.setFocus(true)
+        m.videoList.itemComponentName = "CompactRow"
         m.videoList.observeField("itemSelected", "onVideoSelected")
         m.videoList.observeField("itemFocused", "onVideoFocused")
         print "MainScene: 'videoList' node found and focused."
@@ -55,6 +57,7 @@ sub loadFeed()
     m.feedLoaded = true
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")
+    m.apiTask.observeField("sources", "onSourcesLoaded")
     m.apiTask.observeField("thumbnailResult", "onThumbnailLoaded")
     m.apiTask.observeField("errorMessage", "onAPIError")
     m.apiTask.serverURL = m.serverURL
@@ -89,6 +92,19 @@ sub onFeedLoaded()
     end if
 end sub
 
+sub onSourcesLoaded()
+    sources = m.apiTask.sources
+    if sources = invalid then return
+
+    m.sourceLookup = {}
+    for each source in sources
+        if source.id <> invalid
+            m.sourceLookup[source.id.toStr()] = source
+        end if
+    end for
+    print "MainScene: Cached "; m.sourceLookup.Count(); " source descriptions."
+end sub
+
 sub buildContentTree()
     if m.rawVideoData.Count() = 0 then return
 
@@ -98,39 +114,38 @@ sub buildContentTree()
         for each item in m.rawVideoData
             node = createVideoNode(rootNode, item)
         end for
-        if m.videoList <> invalid
-            m.videoList.itemComponentName = ""
-        end if
     else if m.layoutMode = "grouped"
         sortedData = sortAndGroupData(m.rawVideoData)
         currentSource = ""
+        currentSourceId = 0
         for each item in sortedData
             if item.sourceName <> currentSource and item.sourceName <> ""
                 currentSource = item.sourceName
+                currentSourceId = item.sourceId
                 headerNode = rootNode.CreateChild("VideoItemNode")
                 headerNode.title = currentSource
                 headerNode.isHeader = true
+                headerNode.sourceId = currentSourceId
+                headerNode.layoutMode = m.layoutMode
             end if
             createVideoNode(rootNode, item)
         end for
-        if m.videoList <> invalid
-            m.videoList.itemComponentName = "CompactRow"
-        end if
     else if m.layoutMode = "compact"
         sortedData = sortAndGroupData(m.rawVideoData)
         currentSource = ""
+        currentSourceId = 0
         for each item in sortedData
             if item.sourceName <> currentSource and item.sourceName <> ""
                 currentSource = item.sourceName
+                currentSourceId = item.sourceId
                 headerNode = rootNode.CreateChild("VideoItemNode")
                 headerNode.title = currentSource
                 headerNode.isHeader = true
+                headerNode.sourceId = currentSourceId
+                headerNode.layoutMode = m.layoutMode
             end if
             createVideoNode(rootNode, item)
         end for
-        if m.videoList <> invalid
-            m.videoList.itemComponentName = "CompactRow"
-        end if
     end if
 
     m.videoContent = rootNode
@@ -143,7 +158,7 @@ sub buildContentTree()
     end if
 end sub
 
-sub createVideoNode(parent as Object, item as Object)
+function createVideoNode(parent as Object, item as Object) as Object
     node = parent.CreateChild("VideoItemNode")
     node.title = item.title
     node.url = item.url
@@ -154,9 +169,11 @@ sub createVideoNode(parent as Object, item as Object)
     node.playbackPosition = item.playbackPosition
     node.durationSeconds = item.durationSeconds
     node.sourceName = item.sourceName
+    node.sourceId = item.sourceId
     node.uploadDate = item.uploadDate
+    node.layoutMode = m.layoutMode
     return node
-end sub
+end function
 
 function sortAndGroupData(data as Object) as Object
     if data.Count() = 0 then return data
@@ -207,26 +224,24 @@ end function
 sub onVideoFocused()
     if m.videoList = invalid or m.videoContent = invalid then return
 
-    ' Skip header items when focusing
-    focusedIndex = m.videoList.itemFocused
-    if focusedIndex >= 0 and focusedIndex < m.videoContent.GetChildCount()
-        itemNode = m.videoContent.GetChild(focusedIndex)
-        if itemNode <> invalid and itemNode.isHeader = true
-            ' Jump to next video item
-            nextIndex = findNextVideoIndex(focusedIndex, 1)
-            if nextIndex >= 0
-                m.videoList.jumpToItem = nextIndex
-            end if
-            return
-        end if
-    end if
-
     ' Postpone image fetching while scrolling.
     ' Reset timer on every navigation event.
     if m.posterDelayTimer <> invalid
         m.posterDelayTimer.control = "STOP"
         m.posterDelayTimer.control = "START"
     end if
+
+    ' Update rowFocused field on content nodes to trigger focus rectangle
+    newFocusedIndex = m.videoList.itemFocused
+    if m.lastFocusedIndex >= 0 and m.lastFocusedIndex < m.videoContent.GetChildCount() and m.lastFocusedIndex <> newFocusedIndex
+        oldNode = m.videoContent.GetChild(m.lastFocusedIndex)
+        if oldNode <> invalid then oldNode.rowFocused = false
+    end if
+    if newFocusedIndex >= 0 and newFocusedIndex < m.videoContent.GetChildCount()
+        newNode = m.videoContent.GetChild(newFocusedIndex)
+        if newNode <> invalid then newNode.rowFocused = true
+    end if
+    m.lastFocusedIndex = newFocusedIndex
 end sub
 
 sub onPosterDelayTimerFire()
@@ -235,13 +250,23 @@ sub onPosterDelayTimerFire()
     if focusedIndex >= 0 and focusedIndex < m.videoContent.GetChildCount()
         itemNode = m.videoContent.GetChild(focusedIndex)
         if itemNode <> invalid and itemNode.isHeader <> true
+            ' Video item - reset to normal layout
             if m.previewTitle <> invalid
                 m.previewTitle.text = itemNode.title
+                m.previewTitle.translation = [770, 345]
             end if
             if m.previewDescription <> invalid
+                m.previewDescription.numLines = 9
+                m.previewDescription.height = "250"
                 desc = itemNode.description
                 if desc = invalid or desc = "" then desc = "No description available."
                 m.previewDescription.text = desc
+                m.previewDescription.translation = [770, 420]
+            end if
+
+            ' Show poster
+            if m.previewPoster <> invalid
+                m.previewPoster.uri = ""
             end if
 
             ' Lazy-load thumbnail
@@ -258,8 +283,29 @@ sub onPosterDelayTimerFire()
                     m.apiTask.thumbnailRequest = { url: itemNode.SDPosterUrl, id: videoId }
                 end if
             end if
+        else if itemNode <> invalid and itemNode.isHeader = true
+            ' Header item - move labels up into poster area
+            if m.previewTitle <> invalid
+                m.previewTitle.text = itemNode.title
+                m.previewTitle.translation = [770, 85]
+            end if
+            desc = ""
+            if m.sourceLookup <> invalid
+                sourceData = m.sourceLookup[itemNode.sourceId.toStr()]
+                if sourceData <> invalid and sourceData.description <> invalid
+                    desc = sourceData.description
+                end if
+            end if
+            if desc = "" then desc = "No description available."
+            if m.previewDescription <> invalid
+                m.previewDescription.numLines = 20
+                m.previewDescription.height = "520"
+                m.previewDescription.text = desc
+                m.previewDescription.translation = [770, 120]
+            end if
+            if m.previewPoster <> invalid then m.previewPoster.uri = ""
         else
-            ' Header item or invalid - clear preview
+            ' Invalid - clear preview
             if m.previewTitle <> invalid then m.previewTitle.text = ""
             if m.previewDescription <> invalid then m.previewDescription.text = ""
             if m.previewPoster <> invalid then m.previewPoster.uri = ""
@@ -703,8 +749,42 @@ sub onSettingsSelected()
     else if buttonIndex = 1
         togglePostPlayDialog()
     else if buttonIndex = 2
-        toggleLayoutMode()
+        showLayoutPickerDialog()
     end if
+end sub
+
+sub showLayoutPickerDialog()
+    scene = m.top.getScene()
+    scene.dialog = invalid
+
+    dialog = CreateObject("roSGNode", "StandardMessageDialog")
+    dialog.title = "Select Layout Mode"
+    dialog.message = ["Choose how videos are displayed in the list:"]
+    dialog.buttons = ["Standard", "Grouped", "Compact", "Cancel"]
+
+    dialog.observeField("buttonSelected", "onLayoutPickerSelected")
+    scene.dialog = dialog
+end sub
+
+sub onLayoutPickerSelected()
+    scene = m.top.getScene()
+    dialog = scene.dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    scene.dialog = invalid
+
+    layoutModes = ["standard", "grouped", "compact"]
+    if buttonIndex >= 0 and buttonIndex < layoutModes.Count()
+        m.layoutMode = layoutModes[buttonIndex]
+        saveSettings()
+
+        if m.rawVideoData.Count() > 0
+            buildContentTree()
+        end if
+    end if
+
+    showSettingsDialog()
 end sub
 
 sub showServerInputDialog()
@@ -778,32 +858,12 @@ sub togglePostPlayDialog()
     showSettingsDialog()
 end sub
 
-sub toggleLayoutMode()
-    modes = ["standard", "grouped", "compact"]
-    currentIndex = 0
-    for i = 0 to modes.Count() - 1
-        if modes[i] = m.layoutMode
-            currentIndex = i
-            exit for
-        end if
-    end for
-    nextIndex = (currentIndex + 1) Mod modes.Count()
-    m.layoutMode = modes[nextIndex]
-    saveSettings()
-
-    ' Rebuild the list with new layout
-    if m.rawVideoData.Count() > 0
-        buildContentTree()
-    end if
-
-    showSettingsDialog()
-end sub
-
 sub restartFeed()
     print "MainScene: Restarting feed with serverURL="; m.serverURL
     m.thumbnailCache = {}
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")
+    m.apiTask.observeField("sources", "onSourcesLoaded")
     m.apiTask.observeField("thumbnailResult", "onThumbnailLoaded")
     m.apiTask.observeField("errorMessage", "onAPIError")
     m.apiTask.serverURL = m.serverURL
@@ -840,3 +900,4 @@ sub onAPIErrorAction()
         showServerInputDialog()
     end if
 end sub
+

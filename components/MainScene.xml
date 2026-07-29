@@ -11,13 +11,15 @@
             font="font:LargeBoldSystemFont" />
 
         <!-- Left Side: Scrollable Video Title List -->
-        <LabelList
-            id="videoList"
-            translation="[60, 85]"
-            itemSize="[680, 48]"
-            itemSpacing="[0, 6]"
-            numRows="11"
-            focusable="true" />
+<MarkupList
+             id="videoList"
+             translation="[60, 85]"
+             itemSize="[680, 48]"
+             itemSpacing="[0, 6]"
+             numRows="11"
+             focusable="true"
+             drawFocusFeedback="false"
+             itemComponentName="CompactRow" />
 
         <!-- Empty State Message -->
         <Label

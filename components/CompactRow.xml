@@ -5,6 +5,13 @@
     </interface>
 
     <children>
+        <Group id="focusOutline" visible="false">
+            <Rectangle translation="[0, 0]" width="680" height="2" color="0xFFFFFFFF" />
+            <Rectangle translation="[0, 46]" width="680" height="2" color="0xFFFFFFFF" />
+            <Rectangle translation="[0, 0]" width="2" height="48" color="0xFFFFFFFF" />
+            <Rectangle translation="[678, 0]" width="2" height="48" color="0xFFFFFFFF" />
+        </Group>
+
         <Label
             id="headerLabel"
             translation="[10, 4]"
@@ -53,29 +60,56 @@
             m.titleLabel = m.top.FindNode("titleLabel")
             m.durationLabel = m.top.FindNode("durationLabel")
             m.dateLabel = m.top.FindNode("dateLabel")
+            m.focusOutline = m.top.FindNode("focusOutline")
+            m.top.observeField("itemContent.rowFocused", "onRowFocusedChanged")
+        end sub
+
+        sub onRowFocusedChanged()
+            content = m.top.itemContent
+            if content <> invalid
+                m.focusOutline.visible = content.rowFocused
+            end if
         end sub
 
         sub onContentChanged()
             content = m.top.itemContent
             if content = invalid then return
 
-            if content.isHeader = true
+            m.focusOutline.visible = content.rowFocused
+
+            if content.layoutMode = "standard"
+                m.headerLabel.visible = false
+                m.durationLabel.visible = false
+                m.dateLabel.visible = false
+                m.titleLabel.visible = true
+                m.titleLabel.width = 660
+                m.titleLabel.text = content.title
+            else if content.isHeader = true
                 m.headerLabel.visible = true
                 m.headerLabel.text = content.title
                 m.titleLabel.visible = false
                 m.durationLabel.visible = false
                 m.dateLabel.visible = false
+            else if content.layoutMode = "grouped"
+                m.headerLabel.visible = false
+                m.durationLabel.visible = false
+                m.dateLabel.visible = false
+                m.titleLabel.visible = true
+                m.titleLabel.width = 660
+                m.titleLabel.text = content.title
             else
                 m.headerLabel.visible = false
                 m.titleLabel.visible = true
+                m.titleLabel.width = 510
                 m.titleLabel.text = content.title
 
                 if content.durationSeconds <> invalid and content.durationSeconds > 0
                     m.durationLabel.visible = true
                     secs = content.durationSeconds
-                    hrs = secs / 3600
-                    mins = (secs Mod 3600) / 60
-                    s = secs Mod 60
+                    hrs = Int(secs / 3600)
+                    remaining = secs - (hrs * 3600)
+                    mins = Int(remaining / 60)
+                    s = remaining - (mins * 60)
                     if hrs > 0
                         durStr = hrs.ToStr() + ":" + Right("0" + mins.ToStr(), 2) + ":" + Right("0" + s.ToStr(), 2)
                     else

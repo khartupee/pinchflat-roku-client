@@ -3,8 +3,11 @@
     <interface>
         <field id="playbackPosition" type="integer" value="0" />
         <field id="durationSeconds" type="integer" value="0" />
+        <field id="sourceId" type="integer" value="0" />
         <field id="sourceName" type="string" value="" />
         <field id="uploadDate" type="string" value="" />
         <field id="isHeader" type="boolean" value="false" />
+        <field id="layoutMode" type="string" value="standard" />
+        <field id="rowFocused" type="boolean" value="false" />
     </interface>
 </component>

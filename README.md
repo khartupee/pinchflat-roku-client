@@ -1,15 +1,31 @@
 # Pinchflat Roku Client
 
-A native Roku TV channel client written in BrightScript and Roku SceneGraph (RSG) to browse, stream, and manage video libraries downloaded and indexed by your self-hosted  **khartupee/pinchflat-roku Pinchflat** server.
+A native Roku TV channel client written in BrightScript and Roku SceneGraph (RSG) to browse, stream, and manage video libraries downloaded and indexed by your self-hosted **khartupee/pinchflat-roku Pinchflat** server.
 
 ---
 
 ## 📺 Screens & Dialogue Navigation
 
 ### 1. Main Media Grid
-* **Left Panel:** Scrollable, vertical `LabelList` showcasing the list of downloaded videos currently indexed on your Pinchflat server.
-* **Right Panel:** Visual details preview. Displays the video title, high-resolution thumbnail artwork, and clean formatted descriptions of the focused video.
+
+Three layout modes selectable from **Settings → Change Layout**:
+
+| Mode | Left Panel | Right Panel |
+|---|---|---|
+| **Standard** | Flat list, video title only, no headers | Poster, title, description |
+| **Grouped** | Source headers (focusable) + video titles beneath | Poster, title, description |
+| **Compact** | Source headers (focusable) + video titles, durations, and upload dates | Poster, title, duration, date |
+
+| ![Standard](images/screenshots/standard.png) | ![Grouped](images/screenshots/grouped.png) | ![Compact](images/screenshots/compact.png) |
+|---|---|---|
+| *Standard layout* | *Grouped layout* | *Compact layout* |
+
+* **Left Panel:** Scrollable, vertical `MarkupList` with custom row component (`CompactRow`). Renders video titles, optional duration, and optional upload date depending on the active layout mode. Source headers mark the beginning of each source group.
+* **Right Panel:** Visual details preview. When a video is focused, displays the title, high-resolution thumbnail artwork, and formatted description. When a source header is focused, displays the source name and description (shifted into the poster area since sources have no thumbnail).
 * **Dynamic Poster Loading Debounce:** Incorporates a 150ms focus-change timer. When scrolling quickly through the list, image downloading is postponed until scrolling stops, delivering a fluid, lag-free UI experience.
+
+![Compact — Source Header Selected](images/screenshots/compactsource.png)
+*When a source header is focused, the source name and description appear in the right panel.*
 
 ### 2. Fullscreen Video Player
 * Pressing **OK** (Select) on a list item automatically launches the full-screen native `Video` player node.
@@ -32,13 +48,16 @@ A native Roku TV channel client written in BrightScript and Roku SceneGraph (RSG
   * **Delete & Ignore:** Instantly delete the file and ignore the video.
   * **Keep Video:** Close the dialog and keep the video files.
 
+### 6. Settings Dialog
+* Opens a modal dialog with configurable options (layout mode toggle, post-play dialog toggle, etc.).
+
 ---
 
 ## ⚙️ Persistent Settings & Registry
 
 The client persistent data is managed on your TV's flash storage using Roku's native `roRegistrySection` under the section name **`AppSettings`**:
 
-* **`serverURL`**: Stores your self-hosted Pinchflat server's IP address or hostname (e.g., `192.168.1.7:8945`).
+* **`serverURL`**: Stores your self-hosted Pinchflat server's IP address or hostname (e.g., `192.168.1.7:8945`). The client normalizes all URLs to HTTPS via `rewriteURL()` to prevent NGINX redirect issues.
 * **`showPostPlayDialog`**: Boolean string ("true"/"false") indicating whether the "Video Finished" auto-delete dialog should prompt after a video reaches its end.
 
 ---
@@ -58,6 +77,6 @@ Deployment scripts dynamically resolve their directories relative to their execu
 
 1. Configure your target Roku IP and password inside your script.
 2. Compile and push the package directly to your developer-enabled Roku:
-   ```bash
-   bash deploy.sh
-   ```
+    ```bash
+    bash deploy.sh
+    ```

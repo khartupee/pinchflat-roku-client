@@ -53,6 +53,9 @@ sub run()
             srcName = ""
             if video.source_name <> invalid then srcName = video.source_name
 
+            srcId = 0
+            if video.source_id <> invalid then srcId = video.source_id
+
             uploadDate = ""
             if video.uploaded_at <> invalid then uploadDate = formatDate(video.uploaded_at)
 
@@ -66,6 +69,7 @@ sub run()
                 playbackPosition: playPos
                 durationSeconds: vidDur
                 sourceName: srcName
+                sourceId: srcId
                 uploadDate: uploadDate
             })
         end if
@@ -73,6 +77,19 @@ sub run()
 
     print "APITask: Total compiled videos ready to send: "; videoList.Count()
     m.top.content = videoList
+
+    ' Fetch sources for header descriptions
+    sourcesUrl = m.top.serverURL + "/api/v1/sources"
+    sourcesTransfer = CreateObject("roUrlTransfer")
+    sourcesTransfer.SetUrl(sourcesUrl)
+    sourcesResponse = sourcesTransfer.GetToString()
+    if sourcesResponse <> "" and sourcesResponse <> invalid
+        sourcesJson = ParseJson(sourcesResponse)
+        if sourcesJson <> invalid
+            m.top.sources = sourcesJson
+            print "APITask: Loaded "; sourcesJson.Count(); " sources."
+        end if
+    end if
 
     ' Set up scoped observers for action and thumbnail requests (runs in Task thread)
     m.port = CreateObject("roMessagePort")
@@ -139,15 +156,15 @@ function cleanDescription(rawDesc as String) as String
 end function
 
 function formatDate(dateStr as String) as String
-    ' Input: "2026-07-28T11:21:00"
-    ' Output: "Jul 28, 2026"
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    parts = dateStr.Split("T")
+    clean = dateStr.Replace("Z", "")
+    parts = clean.Split("T")
     if parts.Count() < 1 then return ""
     dateParts = parts[0].Split("-")
     if dateParts.Count() < 3 then return ""
-    monthIndex = Int(dateParts[1]) - 1
-    if monthIndex < 0 or monthIndex > 11 then return ""
+    monthVal = Val(dateParts[1])
+    if monthVal < 1 or monthVal > 12 then return ""
+    monthIndex = monthVal - 1
     day = dateParts[2]
     year = dateParts[0]
     return months[monthIndex] + " " + day + ", " + year
@@ -158,10 +175,10 @@ function formatDuration(seconds as Integer) as String
     hrs = seconds / 3600
     mins = (seconds Mod 3600) / 60
     secs = seconds Mod 60
-    if hrs > 0
-        return hrs.ToStr() + ":" + Right("0" + mins.ToStr(), 2) + ":" + Right("0" + secs.ToStr(), 2)
+    if hrs >= 1
+        return Int(hrs).ToStr() + ":" + Right("0" + Int(mins).ToStr(), 2) + ":" + Right("0" + Int(secs).ToStr(), 2)
     end if
-    return mins.ToStr() + ":" + Right("0" + secs.ToStr(), 2)
+    return Int(mins).ToStr() + ":" + Right("0" + Int(secs).ToStr(), 2)
 end function
 
 sub onActionRequest(event as Object)
