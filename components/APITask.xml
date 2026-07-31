@@ -7,6 +7,8 @@
         <field id="sources" type="array" />
         <field id="actionRequest" type="assocarray" />
         <field id="serverURL" type="string" value="http://192.168.1.7:8945" />
+        <field id="basicAuthUsername" type="string" />
+        <field id="basicAuthPassword" type="string" />
         <field id="thumbnailRequest" type="assocarray" />
         <field id="thumbnailResult" type="assocarray" />
         <field id="errorMessage" type="string" />

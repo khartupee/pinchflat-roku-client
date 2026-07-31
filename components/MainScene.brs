@@ -11,7 +11,9 @@ sub init()
     m.positionSaveTimer = m.top.findNode("positionSaveTimer")
     m.emptyStateLabel = m.top.findNode("emptyStateLabel")
 
-    ' Load settings from registry
+    ' Load settings from registry (sets m.basicAuthUsername and m.basicAuthPassword from registry)
+    m.basicAuthUsername = ""
+    m.basicAuthPassword = ""
     loadSettings()
 
     ' Thumbnail cache: maps video ID to local file path
@@ -48,6 +50,7 @@ sub init()
     if m.serverURL = ""
         showServerInputDialog()
     else
+        ' Always try loading feed first - if server requires auth, onAPIError will prompt
         loadFeed()
     end if
 end sub
@@ -61,6 +64,8 @@ sub loadFeed()
     m.apiTask.observeField("thumbnailResult", "onThumbnailLoaded")
     m.apiTask.observeField("errorMessage", "onAPIError")
     m.apiTask.serverURL = m.serverURL
+    m.apiTask.basicAuthUsername = m.basicAuthUsername
+    m.apiTask.basicAuthPassword = m.basicAuthPassword
     m.apiTask.control = "RUN"
 end sub
 
@@ -654,7 +659,20 @@ sub loadSettings()
         sec.Flush()
     end if
 
-    print "MainScene: Loaded settings - serverURL='"; m.serverURL; "' showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode
+    ' Load basic auth credentials
+    if sec.Exists("basicAuthUsername")
+        m.basicAuthUsername = sec.Read("basicAuthUsername")
+    else
+        m.basicAuthUsername = ""
+    end if
+
+    if sec.Exists("basicAuthPassword")
+        m.basicAuthPassword = sec.Read("basicAuthPassword")
+    else
+        m.basicAuthPassword = ""
+    end if
+
+    print "MainScene: Loaded settings - serverURL='"; m.serverURL; "' showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode; " basicAuth="; m.basicAuthUsername
 end sub
 
 sub saveSettings()
@@ -662,8 +680,10 @@ sub saveSettings()
     sec.Write("serverURL", m.serverURL)
     sec.Write("showPostPlayDialog", m.showPostPlayDialogSetting.toStr())
     sec.Write("layoutMode", m.layoutMode)
+    sec.Write("basicAuthUsername", m.basicAuthUsername)
+    sec.Write("basicAuthPassword", m.basicAuthPassword)
     sec.Flush()
-    print "MainScene: Saved settings - serverURL="; m.serverURL; " showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode
+    print "MainScene: Saved settings - serverURL="; m.serverURL; " showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode; " basicAuth="; m.basicAuthUsername
 end sub
 
 sub showOptionsMenu()
@@ -729,8 +749,11 @@ sub showSettingsDialog()
     layoutLabel = layoutNames[m.layoutMode]
     if layoutLabel = invalid then layoutLabel = "Standard"
 
-    dialog.message = ["Server: " + m.serverURL, "Video Finished Dialog: " + postPlayStatus, "Layout: " + layoutLabel]
-    dialog.buttons = ["Change Server Address", "Toggle Video Finished Dialog", "Change Layout", "Close"]
+    authStatus = "Not Set"
+    if m.basicAuthUsername <> "" then authStatus = "Configured"
+
+    dialog.message = ["Server: " + m.serverURL, "Video Finished Dialog: " + postPlayStatus, "Layout: " + layoutLabel, "Auth: " + authStatus]
+    dialog.buttons = ["Change Server Address", "Toggle Video Finished Dialog", "Change Layout", "Change Auth", "Close"]
 
     dialog.observeField("buttonSelected", "onSettingsSelected")
     scene.dialog = dialog
@@ -750,6 +773,8 @@ sub onSettingsSelected()
         togglePostPlayDialog()
     else if buttonIndex = 2
         showLayoutPickerDialog()
+    else if buttonIndex = 3
+        showAuthInputDialog()
     end if
 end sub
 
@@ -839,9 +864,8 @@ sub onServerInputSelected()
             else
                 loadFeed()
             end if
+            showSettingsDialog()
         end if
-
-        showSettingsDialog()
     else
         ' Cancel pressed - if no URL set yet, prompt again
         if m.serverURL = ""
@@ -858,6 +882,81 @@ sub togglePostPlayDialog()
     showSettingsDialog()
 end sub
 
+' ==================== Auth Input Dialog ====================
+
+sub showAuthInputDialog()
+    scene = m.top.getScene()
+    scene.dialog = invalid
+
+    m.top.signalBeacon("AppDialogInitiate")
+
+    ' First dialog: username
+    usernameDialog = CreateObject("roSGNode", "StandardKeyboardDialog")
+    usernameDialog.title = "Basic Auth Username"
+    usernameDialog.text = m.basicAuthUsername
+    usernameDialog.keyboardDomain = "alphanumeric"
+    usernameDialog.buttons = ["Next", "Cancel"]
+    usernameDialog.addFields({ step: "username" })
+    usernameDialog.observeField("buttonSelected", "onAuthInputStepSelected")
+    scene.dialog = usernameDialog
+end sub
+
+sub onAuthInputStepSelected()
+    scene = m.top.getScene()
+    dialog = scene.dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    scene.dialog = invalid
+
+    if buttonIndex = 0
+        ' Save the username and proceed to password
+        m.basicAuthUsername = dialog.text.Trim()
+
+        ' Second dialog: password
+        passwordDialog = CreateObject("roSGNode", "StandardKeyboardDialog")
+        passwordDialog.title = "Basic Auth Password (leave blank to clear)"
+        passwordDialog.text = m.basicAuthPassword
+        passwordDialog.keyboardDomain = "alphanumeric"
+        passwordDialog.buttons = ["Save", "Cancel"]
+        passwordDialog.observeField("buttonSelected", "onAuthInputSelected")
+        scene.dialog = passwordDialog
+    else
+        ' Cancelled
+        m.top.signalBeacon("AppDialogComplete")
+        showSettingsDialog()
+    end if
+end sub
+
+sub onAuthInputSelected()
+    scene = m.top.getScene()
+    dialog = scene.dialog
+
+    buttonIndex = dialog.buttonSelected
+    passwordText = dialog.text
+
+    scene.dialog = invalid
+
+    m.top.signalBeacon("AppDialogComplete")
+
+    if buttonIndex = 0
+        ' Save the password
+        m.basicAuthPassword = passwordText
+
+        saveSettings()
+
+        ' Load or restart feed with new credentials
+        if m.feedLoaded
+            restartFeed()
+        else
+            loadFeed()
+        end if
+    else
+        ' Cancelled - if this was the initial prompt, show settings so user can try again
+        showSettingsDialog()
+    end if
+end sub
+
 sub restartFeed()
     print "MainScene: Restarting feed with serverURL="; m.serverURL
     m.thumbnailCache = {}
@@ -867,12 +966,21 @@ sub restartFeed()
     m.apiTask.observeField("thumbnailResult", "onThumbnailLoaded")
     m.apiTask.observeField("errorMessage", "onAPIError")
     m.apiTask.serverURL = m.serverURL
+    m.apiTask.basicAuthUsername = m.basicAuthUsername
+    m.apiTask.basicAuthPassword = m.basicAuthPassword
     m.apiTask.control = "RUN"
 end sub
 
 sub onAPIError()
     errorMsg = m.apiTask.errorMessage
     if errorMsg = "" or errorMsg = invalid then return
+
+    ' If server requires auth, prompt for credentials
+    if errorMsg = "AUTH_REQUIRED"
+        print "MainScene: Server requires authentication, prompting user."
+        showAuthInputDialog()
+        return
+    end if
 
     scene = m.top.getScene()
     scene.dialog = invalid

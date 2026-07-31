@@ -8,6 +8,7 @@ sub run()
     ' Fetch JSON API containing all videos
     jsonUrl = m.top.serverURL + "/api/v1/videos"
     jsonTransfer = CreateObject("roUrlTransfer")
+    setupAuth(jsonTransfer)
     jsonTransfer.SetUrl(jsonUrl)
     jsonResponse = jsonTransfer.GetToString()
     print "APITask: JSON response length: "; Len(jsonResponse)
@@ -16,19 +17,20 @@ sub run()
     if parsedJson = invalid or jsonResponse = ""
         ' API call failed - check if server is reachable but running wrong version
         checkTransfer = CreateObject("roUrlTransfer")
+        setupAuth(checkTransfer)
         checkTransfer.SetUrl(m.top.serverURL + "/healthcheck")
         checkResponse = checkTransfer.GetToString()
 
         if checkResponse <> "" and checkResponse <> invalid
-            ' Server responded to healthcheck - it's Pinchflat but missing Roku API
-            errorMsg = "Connected to a Pinchflat server, but it needs to be upgraded to khartupee/pinchflat-roku to work with this client." + Chr(10) + Chr(10) + "Current server: " + m.top.serverURL
+            ' Server responded to healthcheck - it's Pinchflat but missing Roku API or auth failed
+            m.top.errorMessage = "AUTH_REQUIRED"
         else
             ' Server unreachable or not Pinchflat
             errorMsg = "Could not connect to server at " + m.top.serverURL + Chr(10) + Chr(10) + "Please check your server URL in Settings."
+            m.top.errorMessage = errorMsg
         end if
 
-        print "APITask ERROR: "; errorMsg
-        m.top.errorMessage = errorMsg
+        print "APITask ERROR: "; m.top.errorMessage
         parsedJson = []
     end if
 
@@ -81,6 +83,7 @@ sub run()
     ' Fetch sources for header descriptions
     sourcesUrl = m.top.serverURL + "/api/v1/sources"
     sourcesTransfer = CreateObject("roUrlTransfer")
+    setupAuth(sourcesTransfer)
     sourcesTransfer.SetUrl(sourcesUrl)
     sourcesResponse = sourcesTransfer.GetToString()
     if sourcesResponse <> "" and sourcesResponse <> invalid
@@ -192,6 +195,7 @@ sub onActionRequest(event as Object)
         url = m.top.serverURL + "/api/v1/videos/" + videoId
         print "APITask: DELETE "; url
         request = CreateObject("roUrlTransfer")
+        setupAuth(request)
         request.SetUrl(url)
         request.SetRequest("DELETE")
         response = request.PostFromString("")
@@ -200,6 +204,7 @@ sub onActionRequest(event as Object)
         url = m.top.serverURL + "/api/v1/videos/" + videoId + "/ignore"
         print "APITask: POST "; url
         request = CreateObject("roUrlTransfer")
+        setupAuth(request)
         request.SetUrl(url)
         request.SetRequest("POST")
         response = request.PostFromString("")
@@ -210,6 +215,7 @@ sub onActionRequest(event as Object)
         url = m.top.serverURL + "/api/v1/videos/" + videoId + "/progress"
         print "APITask: PATCH progress "; url; " position="; position
         request = CreateObject("roUrlTransfer")
+        setupAuth(request)
         request.SetUrl(url)
         request.SetRequest("PATCH")
         request.AddHeader("Content-Type", "application/json")
@@ -228,11 +234,81 @@ sub onThumbnailRequest(event as Object)
 
     localPath = "tmp:/thumb_" + videoId + ".jpg"
     transfer = CreateObject("roUrlTransfer")
+    setupAuth(transfer)
     transfer.SetUrl(url)
     transfer.GetToFile(localPath)
 
     m.top.thumbnailResult = { localPath: localPath, id: videoId }
 end sub
+
+' Adds Basic Auth header to a roUrlTransfer if credentials are configured.
+' Does nothing if username is empty (basic auth not configured).
+sub setupAuth(request as Object)
+    username = m.top.basicAuthUsername
+    if username = "" or username = invalid then return
+
+    password = m.top.basicAuthPassword
+    if password = invalid then password = ""
+
+    ' Build base64-encoded "username:password"
+    credentials = username + ":" + password
+    b64 = base64Encode(credentials)
+
+    request.AddHeader("Authorization", "Basic " + b64)
+end sub
+
+' Manual base64 encoding (EncodeData not available on all Roku firmware)
+function base64Encode(input as String) as String
+    b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    output = ""
+    i = 0
+    len = Len(input)
+
+    while i < len
+        ' Read up to 3 bytes
+        b0 = 0
+        b1 = 0
+        b2 = 0
+        count = 0
+
+        if i < len
+            b0 = Asc(Mid(input, i + 1, 1))
+            i = i + 1
+            count = count + 1
+        end if
+        if i < len
+            b1 = Asc(Mid(input, i + 1, 1))
+            i = i + 1
+            count = count + 1
+        end if
+        if i < len
+            b2 = Asc(Mid(input, i + 1, 1))
+            i = i + 1
+            count = count + 1
+        end if
+
+        ' Encode 3 bytes into 4 base64 characters
+        triple = (b0 * 65536) + (b1 * 256) + b2
+        c1 = Int(triple / 262144) Mod 64
+        c2 = Int(triple / 4096) Mod 64
+        c3 = Int(triple / 64) Mod 64
+        c4 = triple Mod 64
+        output = output + Mid(b64chars, c1 + 1, 1)
+        output = output + Mid(b64chars, c2 + 1, 1)
+        output = output + Mid(b64chars, c3 + 1, 1)
+        output = output + Mid(b64chars, c4 + 1, 1)
+
+        ' Add padding for incomplete groups
+        if count < 3
+            ' Remove the extra chars and add = padding
+            output = Left(output, Len(output) - (3 - count))
+            if count = 1 then output = output + "=="
+            if count = 2 then output = output + "="
+        end if
+    end while
+
+    return output
+end function
 
 function rewriteURL(url as String) as String
     serverURL = m.top.serverURL
@@ -240,6 +316,24 @@ function rewriteURL(url as String) as String
     ' Add http:// if no protocol specified
     if Left(serverURL, 7) <> "http://" and Left(serverURL, 8) <> "https://"
         serverURL = "https://" + serverURL
+    end if
+
+    ' Embed credentials in URL if basic auth is configured (needed for video player)
+    username = m.top.basicAuthUsername
+    if username <> "" and username <> invalid
+        password = m.top.basicAuthPassword
+        if password = invalid then password = ""
+        ' Extract scheme and path from serverURL
+        scheme = ""
+        hostPort = serverURL
+        if Left(serverURL, 8) = "https://"
+            scheme = "https://"
+            hostPort = Right(serverURL, Len(serverURL) - 8)
+        else if Left(serverURL, 7) = "http://"
+            scheme = "http://"
+            hostPort = Right(serverURL, Len(serverURL) - 7)
+        end if
+        serverURL = scheme + username + ":" + password + "@" + hostPort
     end if
 
     ' Extract path from the original URL (everything after the host:port)

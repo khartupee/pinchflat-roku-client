@@ -50,6 +50,22 @@ Three layout modes selectable from **Settings → Change Layout**:
 
 ### 6. Settings Dialog
 * Opens a modal dialog with configurable options (layout mode toggle, post-play dialog toggle, etc.).
+* Includes **Change Auth** to update or remove Basic Auth credentials.
+* Shows **Auth: Configured** or **Auth: Not Set** so you know the current state (the username is never displayed).
+
+### 7. Basic Authentication
+* If your Pinchflat server requires Basic Auth (configured via `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` in `compose.yaml`), the client handles it automatically:
+  * **Auto-detection:** On launch, the client always tries loading the feed first. If the server doesn't require auth, the feed loads immediately with no prompt. If the feed fails but the server is reachable, the client prompts for credentials.
+  * **Two-step credential dialog:** The username and password are collected in separate dialogs to avoid exposing typed characters on screen.
+  * **Persistent storage:** Credentials are saved in the Roku's local registry and reused on subsequent launches.
+  * **Settings → Change Auth:** Update or clear credentials at any time from the Settings dialog.
+* **Server-side configuration:** Set these environment variables in your `compose.yaml`:
+  ```yaml
+  environment:
+    - BASIC_AUTH_USERNAME=your_username
+    - BASIC_AUTH_PASSWORD=your_password
+  ```
+  When these variables are **not** set, the API works without authentication and the client will never prompt for credentials.
 
 ---
 
@@ -59,6 +75,9 @@ The client persistent data is managed on your TV's flash storage using Roku's na
 
 * **`serverURL`**: Stores your self-hosted Pinchflat server's IP address or hostname (e.g., `192.168.1.7:8945`). The client normalizes all URLs to HTTPS via `rewriteURL()` to prevent NGINX redirect issues.
 * **`showPostPlayDialog`**: Boolean string ("true"/"false") indicating whether the "Video Finished" auto-delete dialog should prompt after a video reaches its end.
+* **`layoutMode`**: String — one of `"standard"`, `"grouped"`, or `"compact"`. Controls the MarkupList rendering mode.
+* **`basicAuthUsername`**: String — Basic Auth username for the Pinchflat server. Empty string if the server doesn't require authentication.
+* **`basicAuthPassword`**: String — Basic Auth password for the Pinchflat server. Empty string if the server doesn't require authentication.
 
 ---
 
