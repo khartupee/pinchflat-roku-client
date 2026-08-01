@@ -193,7 +193,7 @@ sub onActionRequest(event as Object)
 
     if actionType = "delete"
         url = m.top.serverURL + "/api/v1/videos/" + videoId
-        print "APITask: DELETE "; url
+        print "APITask: DELETE "; stripAuthFromURL(url)
         request = CreateObject("roUrlTransfer")
         setupAuth(request)
         request.SetUrl(url)
@@ -202,7 +202,7 @@ sub onActionRequest(event as Object)
         print "APITask: DELETE response code: "; response
     else if actionType = "ignore"
         url = m.top.serverURL + "/api/v1/videos/" + videoId + "/ignore"
-        print "APITask: POST "; url
+        print "APITask: POST "; stripAuthFromURL(url)
         request = CreateObject("roUrlTransfer")
         setupAuth(request)
         request.SetUrl(url)
@@ -213,7 +213,7 @@ sub onActionRequest(event as Object)
         position = requestData.position
         if position = invalid then position = 0
         url = m.top.serverURL + "/api/v1/videos/" + videoId + "/progress"
-        print "APITask: PATCH progress "; url; " position="; position
+        print "APITask: PATCH progress "; stripAuthFromURL(url); " position="; position
         request = CreateObject("roUrlTransfer")
         setupAuth(request)
         request.SetUrl(url)
@@ -347,5 +347,18 @@ function rewriteURL(url as String) as String
         return serverURL + path
     end if
 
+    return url
+end function
+
+' Strip "user:pass@" from a URL for safe logging. Returns the URL unchanged if no credentials are present.
+function stripAuthFromURL(url as String) as String
+    if url = "" or url = invalid then return url
+    ' Match scheme://user:pass@host or scheme://host — if user:pass present, remove it
+    regex = CreateObject("roRegex", "^(https?)://[^@/]+@([^/].*)$", "")
+    if regex.Match(url) <> invalid
+        scheme = regex.Match(url)[1]
+        rest = regex.Match(url)[2]
+        return scheme + "://" + rest
+    end if
     return url
 end function

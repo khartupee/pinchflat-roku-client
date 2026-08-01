@@ -3,13 +3,44 @@
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-ROKU_IP="192.168.1.15"          # <-- Replace with your Roku Ultra's local IP address
-ROKU_PASSWORD="hubba"   # <-- Replace with your Developer Mode password
-ROKU_USER="rokudev"             # Roku dev username is always 'rokudev'
-
-# TARGET PATHS
 # Resolve the directory of this script dynamically so it always packages the workspace folder
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Load credentials from .env file (not tracked in Git)
+ENV_FILE="${PROJECT_DIR}/.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    . "$ENV_FILE"
+    set +a
+else
+    echo ""
+    echo "ERROR: Missing .env file at: $ENV_FILE"
+    echo ""
+    echo "Please create it by copying the example file and filling in your values:"
+    echo ""
+    echo "  cp .env.example .env"
+    echo ""
+    echo "Then edit .env with your Roku IP address and Developer Mode password."
+    echo ""
+    exit 1
+fi
+
+# Roku dev username is always 'rokudev'
+ROKU_USER="rokudev"
+
+# Validate required variables
+if [ -z "$ROKU_IP" ] || [ -z "$ROKU_PASSWORD" ]; then
+    echo ""
+    echo "ERROR: ROKU_IP and ROKU_PASSWORD must be set in .env"
+    echo ""
+    echo "Please edit .env and provide valid values:"
+    echo "  ROKU_IP=192.168.1.x"
+    echo "  ROKU_PASSWORD=your_developer_mode_password"
+    echo ""
+    exit 1
+fi
+
+# TARGET PATHS
 BUILD_DIR="${PROJECT_DIR}/build"
 ZIP_FILE="${BUILD_DIR}/pinchflat-client.zip"
 
@@ -142,7 +173,20 @@ RESPONSE=$(curl -sS --digest -u "${ROKU_USER}:${ROKU_PASSWORD}" \
 if echo "$RESPONSE" | grep -q "Install Success"; then
     echo " Done! The channel has successfully compiled and initialized on your TV screen."
 else
-    echo " Deployment Failure. Check the Roku compiler feedback below:"
+    echo " Deployment Failed."
     # Extract clean text error highlights out of the device's returned raw HTML
-    echo "$RESPONSE" | grep -oE '<font color="red">[^<]*</font>' | sed -e 's/<[^>]*>//g'
+    ERRORS=$(echo "$RESPONSE" | grep -oE '<font color="red">[^<]*</font>' | sed -e 's/<[^>]*>//g')
+    if [ -n "$ERRORS" ]; then
+        echo " Compiler errors:"
+        echo "$ERRORS"
+    else
+        echo " No specific compiler errors returned. Common causes:"
+        echo "  - Wrong Roku IP address in .env"
+        echo "  - Wrong Developer Mode password in .env"
+        echo "  - Roku Developer Server not running"
+        echo ""
+        echo " Raw response (first 200 chars):"
+        echo "$RESPONSE" | head -c 200
+        echo ""
+    fi
 fi

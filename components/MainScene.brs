@@ -117,7 +117,7 @@ sub buildContentTree()
 
     if m.layoutMode = "standard"
         for each item in m.rawVideoData
-            node = createVideoNode(rootNode, item)
+            createVideoNode(rootNode, item)
         end for
     else if m.layoutMode = "grouped"
         sortedData = sortAndGroupData(m.rawVideoData)
@@ -470,7 +470,7 @@ sub playVideo(itemIndex as Integer)
 
             ' Only offer resume if position is > 10s and < 95% of duration
             if savedPos > 10 and (duration = 0 or savedPos < duration * 0.95)
-                showResumeDialog(itemIndex, savedPos, duration)
+                showResumeDialog(itemIndex, savedPos)
             else
                 startPlayback(itemIndex, 0)
             end if
@@ -478,7 +478,7 @@ sub playVideo(itemIndex as Integer)
     end if
 end sub
 
-sub showResumeDialog(itemIndex as Integer, savedPos as Integer, duration as Integer)
+sub showResumeDialog(itemIndex as Integer, savedPos as Integer)
     scene = m.top.getScene()
     scene.dialog = invalid
 
@@ -672,7 +672,9 @@ sub loadSettings()
         m.basicAuthPassword = ""
     end if
 
-    print "MainScene: Loaded settings - serverURL='"; m.serverURL; "' showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode; " basicAuth="; m.basicAuthUsername
+    authStatus = "not-set"
+    if m.basicAuthUsername <> "" then authStatus = "configured"
+    print "MainScene: Loaded settings - serverURL='"; m.serverURL; "' showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode; " basicAuth="; authStatus
 end sub
 
 sub saveSettings()
@@ -683,7 +685,9 @@ sub saveSettings()
     sec.Write("basicAuthUsername", m.basicAuthUsername)
     sec.Write("basicAuthPassword", m.basicAuthPassword)
     sec.Flush()
-    print "MainScene: Saved settings - serverURL="; m.serverURL; " showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode; " basicAuth="; m.basicAuthUsername
+    authStatus = "not-set"
+    if m.basicAuthUsername <> "" then authStatus = "configured"
+    print "MainScene: Saved settings - serverURL="; m.serverURL; " showPostPlayDialog="; m.showPostPlayDialogSetting; " layoutMode="; m.layoutMode; " basicAuth="; authStatus
 end sub
 
 sub showOptionsMenu()
@@ -959,6 +963,8 @@ end sub
 
 sub restartFeed()
     print "MainScene: Restarting feed with serverURL="; m.serverURL
+    ' Stop the old APITask before spawning a new one to prevent race conditions
+    if m.apiTask <> invalid then m.apiTask.control = "STOP"
     m.thumbnailCache = {}
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")

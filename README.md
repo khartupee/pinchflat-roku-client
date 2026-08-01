@@ -94,8 +94,18 @@ To maintain high responsiveness, the client implements a **lazy-loading thumbnai
 
 Deployment scripts dynamically resolve their directories relative to their execution paths, making development painless.
 
-1. Configure your target Roku IP and password inside your script.
-2. Compile and push the package directly to your developer-enabled Roku:
+### First-time setup
+
+1. Create a `.env` file with your Roku credentials:
+    ```bash
+    cp .env.example .env
+    ```
+2. Edit `.env` and fill in your Roku's IP address and Developer Mode password.
+   The `.env` file is git-ignored, so your credentials are never committed to the repository.
+
+### Deploy
+
+Compile and push the package directly to your developer-enabled Roku:
     ```bash
     bash deploy.sh
     ```
