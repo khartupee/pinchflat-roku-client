@@ -58,6 +58,11 @@ end sub
 sub loadFeed()
     print "MainScene: Spawning APITask..."
     m.feedLoaded = true
+    ' Show loading indicator so the user knows something is happening
+    if m.emptyStateLabel <> invalid
+        m.emptyStateLabel.text = "Loading videos..."
+        m.emptyStateLabel.visible = true
+    end if
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")
     m.apiTask.observeField("sources", "onSourcesLoaded")
@@ -89,10 +94,27 @@ sub onFeedLoaded()
             m.launchBeaconFired = true
         end if
     else
-        print "MainScene WARNING: APITask returned empty or invalid content."
-        if m.emptyStateLabel <> invalid
-            m.emptyStateLabel.text = "No videos found on server" + Chr(10) + m.serverURL
-            m.emptyStateLabel.visible = true
+        ' Only clear the list and show empty state if the task has actually completed.
+        ' When errorMessage is set, the task ran and failed. When it's not set but content
+        ' is empty, the task may still be fetching — keep the old list visible to avoid flashing.
+        if m.apiTask <> invalid
+            errMsg = m.apiTask.errorMessage
+            if errMsg <> invalid and errMsg <> ""
+                print "MainScene WARNING: APITask returned empty or invalid content."
+                ' Clear the old video list so stale videos don't remain visible
+                if m.videoList <> invalid
+                    m.videoList.content = CreateObject("roSGNode", "ContentNode")
+                end if
+                m.feedLoaded = false
+                if m.emptyStateLabel <> invalid
+                    m.emptyStateLabel.text = "No videos found on server" + Chr(10) + m.serverURL
+                    m.emptyStateLabel.visible = true
+                end if
+            else
+                print "MainScene: APITask still fetching, keeping previous content visible."
+            end if
+        else
+            print "MainScene: APITask is invalid, skipping empty content handling."
         end if
     end if
 end sub
@@ -632,13 +654,9 @@ sub loadSettings()
         m.serverURL = ""
     end if
 
-    ' Ensure URL uses HTTPS (NGINX proxies redirect HTTP to HTTPS, which breaks PATCH)
+    ' Ensure URL has a protocol prefix (if user forgot to enter one)
     if m.serverURL <> ""
-        if Left(m.serverURL, 8) = "https://"
-            ' Already HTTPS, good
-        else if Left(m.serverURL, 7) = "http://"
-            m.serverURL = "https://" + Right(m.serverURL, Len(m.serverURL) - 7)
-        else
+        if Left(m.serverURL, 8) <> "https://" and Left(m.serverURL, 7) <> "http://"
             m.serverURL = "https://" + m.serverURL
         end if
     end if
@@ -852,12 +870,8 @@ sub onServerInputSelected()
         end if
 
         if newURL <> ""
-            ' Ensure HTTPS
-            if Left(newURL, 8) = "https://"
-                ' Already HTTPS
-            else if Left(newURL, 7) = "http://"
-                newURL = "https://" + Right(newURL, Len(newURL) - 7)
-            else
+            ' Ensure URL has a protocol prefix (if user forgot to enter one)
+            if Left(newURL, 8) <> "https://" and Left(newURL, 7) <> "http://"
                 newURL = "https://" + newURL
             end if
             m.serverURL = newURL
@@ -961,11 +975,41 @@ sub onAuthInputSelected()
     end if
 end sub
 
+sub onAuthErrorSelected()
+    scene = m.top.getScene()
+    dialog = scene.dialog
+    if dialog = invalid then return
+
+    buttonIndex = dialog.buttonSelected
+    scene.dialog = invalid
+
+    if buttonIndex = 0
+        ' User chose to enter credentials
+        showAuthInputDialog()
+    else
+        ' Cancelled
+        showSettingsDialog()
+    end if
+end sub
+
 sub restartFeed()
     print "MainScene: Restarting feed with serverURL="; m.serverURL
     ' Stop the old APITask before spawning a new one to prevent race conditions
     if m.apiTask <> invalid then m.apiTask.control = "STOP"
     m.thumbnailCache = {}
+    ' Clear the old video list so stale videos don't remain visible
+    if m.videoList <> invalid
+        m.videoList.content = CreateObject("roSGNode", "ContentNode")
+    end if
+    ' Clear the preview panel (title, description, poster) so stale source info doesn't linger
+    if m.previewTitle <> invalid then m.previewTitle.text = ""
+    if m.previewDescription <> invalid then m.previewDescription.text = ""
+    if m.previewPoster <> invalid then m.previewPoster.uri = ""
+    ' Show loading indicator so the user knows something is happening
+    if m.emptyStateLabel <> invalid
+        m.emptyStateLabel.text = "Loading videos..."
+        m.emptyStateLabel.visible = true
+    end if
     m.apiTask = CreateObject("roSGNode", "APITask")
     m.apiTask.observeField("content", "onFeedLoaded")
     m.apiTask.observeField("sources", "onSourcesLoaded")
@@ -984,7 +1028,15 @@ sub onAPIError()
     ' If server requires auth, prompt for credentials
     if errorMsg = "AUTH_REQUIRED"
         print "MainScene: Server requires authentication, prompting user."
-        showAuthInputDialog()
+        ' Show a brief error message so the user knows why they're being prompted
+        scene = m.top.getScene()
+        scene.dialog = invalid
+        errorDialog = CreateObject("roSGNode", "StandardMessageDialog")
+        errorDialog.title = "Authentication Failed"
+        errorDialog.message = ["The server requires a valid username and password. Please try again."]
+        errorDialog.buttons = ["Enter Credentials", "Cancel"]
+        errorDialog.observeField("buttonSelected", "onAuthErrorSelected")
+        scene.dialog = errorDialog
         return
     end if
 

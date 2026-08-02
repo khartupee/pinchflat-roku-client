@@ -10,7 +10,7 @@ sub run()
     jsonTransfer = CreateObject("roUrlTransfer")
     setupAuth(jsonTransfer)
     jsonTransfer.SetUrl(jsonUrl)
-    jsonResponse = jsonTransfer.GetToString()
+    jsonResponse = asyncGetToString(jsonTransfer, 10000)
     print "APITask: JSON response length: "; Len(jsonResponse)
     
     parsedJson = ParseJson(jsonResponse)
@@ -19,7 +19,7 @@ sub run()
         checkTransfer = CreateObject("roUrlTransfer")
         setupAuth(checkTransfer)
         checkTransfer.SetUrl(m.top.serverURL + "/healthcheck")
-        checkResponse = checkTransfer.GetToString()
+        checkResponse = asyncGetToString(checkTransfer, 10000)
 
         if checkResponse <> "" and checkResponse <> invalid
             ' Server responded to healthcheck - it's Pinchflat but missing Roku API or auth failed
@@ -85,7 +85,7 @@ sub run()
     sourcesTransfer = CreateObject("roUrlTransfer")
     setupAuth(sourcesTransfer)
     sourcesTransfer.SetUrl(sourcesUrl)
-    sourcesResponse = sourcesTransfer.GetToString()
+    sourcesResponse = asyncGetToString(sourcesTransfer, 10000)
     if sourcesResponse <> "" and sourcesResponse <> invalid
         sourcesJson = ParseJson(sourcesResponse)
         if sourcesJson <> invalid
@@ -198,7 +198,7 @@ sub onActionRequest(event as Object)
         setupAuth(request)
         request.SetUrl(url)
         request.SetRequest("DELETE")
-        response = request.PostFromString("")
+        response = asyncPostFromString(request, "", 5000)
         print "APITask: DELETE response code: "; response
     else if actionType = "ignore"
         url = m.top.serverURL + "/api/v1/videos/" + videoId + "/ignore"
@@ -207,7 +207,7 @@ sub onActionRequest(event as Object)
         setupAuth(request)
         request.SetUrl(url)
         request.SetRequest("POST")
-        response = request.PostFromString("")
+        response = asyncPostFromString(request, "", 5000)
         print "APITask: POST response code: "; response
     else if actionType = "save_progress"
         position = requestData.position
@@ -219,7 +219,7 @@ sub onActionRequest(event as Object)
         request.SetUrl(url)
         request.SetRequest("PATCH")
         request.AddHeader("Content-Type", "application/json")
-        response = request.PostFromString("{""position"":" + position.toStr() + "}")
+        response = asyncPostFromString(request, "{""position"":" + position.toStr() + "}", 5000)
     end if
 end sub
 
@@ -256,6 +256,38 @@ sub setupAuth(request as Object)
 
     request.AddHeader("Authorization", "Basic " + b64)
 end sub
+
+' --- Async helpers for timeout control ---
+' roUrlTransfer.SetTimeout() is not available on all Roku firmware, so we use
+' Async* APIs + wait() + AsyncCancel() to enforce a custom timeout.
+
+function asyncGetToString(transfer as Object, timeoutMs as Integer) as String
+    port = CreateObject("roMessagePort")
+    transfer.SetMessagePort(port)
+    transfer.AsyncGetToString()
+    msg = wait(timeoutMs, port)
+    if msg = invalid
+        transfer.AsyncCancel()
+        return ""
+    end if
+    return msg.GetString()
+end function
+
+function asyncPostFromString(transfer as Object, body as String, timeoutMs as Integer) as String
+    port = CreateObject("roMessagePort")
+    transfer.SetMessagePort(port)
+    transfer.AsyncPostFromString(body)
+    msg = wait(timeoutMs, port)
+    if msg = invalid
+        transfer.AsyncCancel()
+        return ""
+    end if
+    return msg.GetString()
+end function
+
+' Note: AsyncGetToFile() is not available on all Roku firmware, so thumbnail
+' downloads use the synchronous GetToFile() instead. Thumbnails are small
+' enough that the default timeout is not a practical concern.
 
 ' Manual base64 encoding (EncodeData not available on all Roku firmware)
 function base64Encode(input as String) as String
@@ -313,30 +345,12 @@ end function
 function rewriteURL(url as String) as String
     serverURL = m.top.serverURL
 
-    ' Add http:// if no protocol specified
+    ' Add https:// if no protocol specified
     if Left(serverURL, 7) <> "http://" and Left(serverURL, 8) <> "https://"
         serverURL = "https://" + serverURL
     end if
 
-    ' Embed credentials in URL if basic auth is configured (needed for video player)
-    username = m.top.basicAuthUsername
-    if username <> "" and username <> invalid
-        password = m.top.basicAuthPassword
-        if password = invalid then password = ""
-        ' Extract scheme and path from serverURL
-        scheme = ""
-        hostPort = serverURL
-        if Left(serverURL, 8) = "https://"
-            scheme = "https://"
-            hostPort = Right(serverURL, Len(serverURL) - 8)
-        else if Left(serverURL, 7) = "http://"
-            scheme = "http://"
-            hostPort = Right(serverURL, Len(serverURL) - 7)
-        end if
-        serverURL = scheme + username + ":" + password + "@" + hostPort
-    end if
-
-    ' Extract path from the original URL (everything after the host:port)
+    ' Extract path from the original URL (everything after the host:port) and prepend serverURL
     regex = CreateObject("roRegex", "^https?://[^/]+(/.*)$", "")
     match = regex.Match(url)
     if match.Count() > 1
@@ -353,11 +367,12 @@ end function
 ' Strip "user:pass@" from a URL for safe logging. Returns the URL unchanged if no credentials are present.
 function stripAuthFromURL(url as String) as String
     if url = "" or url = invalid then return url
-    ' Match scheme://user:pass@host or scheme://host — if user:pass present, remove it
+    ' Match scheme://user:pass@host — if user:pass present, remove it
     regex = CreateObject("roRegex", "^(https?)://[^@/]+@([^/].*)$", "")
-    if regex.Match(url) <> invalid
-        scheme = regex.Match(url)[1]
-        rest = regex.Match(url)[2]
+    match = regex.Match(url)
+    if match <> invalid and match.Count() >= 3
+        scheme = match[1]
+        rest = match[2]
         return scheme + "://" + rest
     end if
     return url
