@@ -1,0 +1,41 @@
+' Test cleanDescription()
+namespace tests
+    @suite("Clean Description")
+    class CleanDescriptionTests extends rooibos.BaseTestSuite
+
+        @describe("cleanDescription unit tests")
+
+        @it("returns empty string for empty input")
+        function test_empty_input()
+            result = cleanDescription("")
+            m.assertEqual(result, "", "empty input returns empty")
+        end function
+
+        @it("returns fallback for short text")
+        function test_short_text()
+            result = cleanDescription("Hi there")
+            m.assertEqual(result, "No description available.", "text < 20 chars returns fallback")
+        end function
+
+        @it("strips URLs from description")
+        function test_strips_urls()
+            input = "Check this out https://example.com and http://test.org more text here"
+            result = cleanDescription(input)
+            m.assertFalse(InStr(result, "http") > 0, "URLs should be stripped")
+        end function
+
+        @it("truncates long descriptions to 200 chars with ellipsis")
+        function test_truncates_long()
+            ' Build a long string without StringRepeat (not available in brs)
+            input = ""
+            for i = 0 to 299
+                input = input + "A"
+            end for
+            input = input + " Done"
+            result = cleanDescription(input)
+            m.assertEqual(Len(result), 200, "should be exactly 200 chars")
+            m.assertEqual(Right(result, 3), "...", "should end with ellipsis")
+        end function
+
+    end class
+end namespace

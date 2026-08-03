@@ -1,0 +1,45 @@
+' Test formatDate()
+namespace tests
+    @suite("Format Date")
+    class FormatDateTests extends rooibos.BaseTestSuite
+
+        @describe("formatDate unit tests")
+
+        @it("formats valid ISO date")
+        function test_iso_date()
+            result = formatDate("2025-08-02T12:00:00Z")
+            m.assertEqual(result, "Aug 02, 2025", "standard ISO date")
+        end function
+
+        @it("formats date without Z suffix")
+        function test_without_z()
+            result = formatDate("2025-01-15T08:30:00")
+            m.assertEqual(result, "Jan 15, 2025", "date without Z")
+        end function
+
+        @it("formats December date")
+        function test_december()
+            result = formatDate("2024-12-31T23:59:59Z")
+            m.assertEqual(result, "Dec 31, 2024", "December")
+        end function
+
+        @it("formats January date")
+        function test_january()
+            result = formatDate("2024-01-01T00:00:00Z")
+            m.assertEqual(result, "Jan 01, 2024", "January")
+        end function
+
+        @it("returns empty for invalid month 13")
+        function test_invalid_month_13()
+            result = formatDate("2025-13-01T00:00:00Z")
+            m.assertEqual(result, "", "month 13 is invalid")
+        end function
+
+        @it("returns empty for month 0")
+        function test_month_zero()
+            result = formatDate("2025-00-01T00:00:00Z")
+            m.assertEqual(result, "", "month 0 is invalid")
+        end function
+
+    end class
+end namespace

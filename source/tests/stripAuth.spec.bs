@@ -1,0 +1,40 @@
+' Test stripAuthFromURL()
+namespace tests
+    @suite("Strip Auth From URL")
+    class StripAuthTests extends rooibos.BaseTestSuite
+
+        @describe("stripAuthFromURL unit tests")
+
+        @it("strips credentials from HTTPS URL")
+        function test_https_credentials()
+            result = stripAuthFromURL("https://user:pass@host.com/api/v1/videos")
+            m.assertEqual(result, "https://host.com/api/v1/videos", "credentials removed")
+        end function
+
+        @it("strips credentials from HTTP URL")
+        function test_http_credentials()
+            result = stripAuthFromURL("http://abcd:1234@192.168.1.106:8945/stream")
+            m.assertEqual(result, "http://192.168.1.106:8945/stream", "credentials removed from IP")
+        end function
+
+        @it("returns URL unchanged when no credentials")
+        function test_no_credentials()
+            result = stripAuthFromURL("https://example.com/path")
+            m.assertEqual(result, "https://example.com/path", "no change")
+        end function
+
+        @it("returns empty string unchanged")
+        function test_empty_string()
+            result = stripAuthFromURL("")
+            m.assertEqual(result, "", "empty stays empty")
+        end function
+
+        @it("handles URL with complex password")
+        function test_complex_password()
+            result = stripAuthFromURL("https://user:p@ss=w0rd@host.com/api")
+            m.assertFalse(InStr(result, "user:") > 0, "username removed")
+            m.assertTrue(InStr(result, "host.com") > 0, "host preserved")
+        end function
+
+    end class
+end namespace

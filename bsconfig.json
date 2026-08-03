@@ -1,0 +1,28 @@
+{
+  "rootDir": ".",
+  "files": [
+    "manifest",
+    "source/**/*",
+    "components/**/*",
+    "images/**/*"
+  ],
+  "plugins": [
+    "rooibos-roku"
+  ],
+  "allowBrighterScriptInBrightScript": true,
+  "diagnosticProjectReferences": false,
+  "diagnosticFilters": [
+    1045,
+    1081,
+    1105,
+    1140,
+    1001,
+    1067,
+    1013
+  ],
+  "rooibos": {
+    "isBuildForTest": true,
+    "showLogs": true,
+    "testsFilePattern": "source/tests/**/*.spec.bs"
+  }
+}

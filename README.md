@@ -90,6 +90,24 @@ To maintain high responsiveness, the client implements a **lazy-loading thumbnai
 
 ---
 
+## 🧪 Testing
+
+The project includes a **Rooibos on-device test suite** with 35 tests covering all utility functions.
+
+### Quick start
+
+```bash
+npm install          # Install test dependencies (BrighterScript, Rooibos)
+npm run check        # Verify setup (Node.js, .env, dependencies)
+npm test             # Compile + deploy + run tests on your Roku
+```
+
+Tests read Roku credentials from `.env` (copy `.env.example` → `.env` and fill in your values).
+
+See [DEV_EXPERIENCE_PLAN.md](DEV_EXPERIENCE_PLAN.md) and [TEST_PLAN_BRIGHTSCRIPT.md](TEST_PLAN_BRIGHTSCRIPT.md) for full details.
+
+---
+
 ## 🚀 Build & Deployment
 
 Deployment scripts dynamically resolve their directories relative to their execution paths, making development painless.

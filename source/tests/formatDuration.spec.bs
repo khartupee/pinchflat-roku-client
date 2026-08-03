@@ -1,0 +1,45 @@
+' Test formatDuration()
+namespace tests
+    @suite("Format Duration")
+    class FormatDurationTests extends rooibos.BaseTestSuite
+
+        @describe("formatDuration unit tests")
+
+        @it("formats zero seconds")
+        function test_zero()
+            result = formatDuration(0)
+            m.assertEqual(result, "0:00", "zero should be 0:00")
+        end function
+
+        @it("formats 60 seconds as 1:00")
+        function test_60_seconds()
+            result = formatDuration(60)
+            m.assertEqual(result, "1:00", "60 seconds = 1:00")
+        end function
+
+        @it("formats 90 seconds as 1:30")
+        function test_90_seconds()
+            result = formatDuration(90)
+            m.assertEqual(result, "1:30", "90 seconds = 1:30")
+        end function
+
+        @it("formats 3600 seconds as 1:00:00")
+        function test_one_hour()
+            result = formatDuration(3600)
+            m.assertEqual(result, "1:00:00", "1 hour")
+        end function
+
+        @it("formats 3661 seconds as 1:01:01")
+        function test_3661_seconds()
+            result = formatDuration(3661)
+            m.assertEqual(result, "1:01:01", "1 hour 1 min 1 sec")
+        end function
+
+        @it("formats 7290 seconds as 2:01:30")
+        function test_7290_seconds()
+            result = formatDuration(7290)
+            m.assertEqual(result, "2:01:30", "2 hours 1 min 1 sec")
+        end function
+
+    end class
+end namespace

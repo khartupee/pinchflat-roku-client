@@ -1,0 +1,57 @@
+' Test base64Encode()
+namespace tests
+    @suite("Base64 Encode")
+    class Base64EncodeTests extends rooibos.BaseTestSuite
+
+        @describe("base64Encode unit tests")
+
+        @it("encodes empty string")
+        function test_empty_string()
+            result = base64Encode("")
+            m.assertEqual(result, "", "empty string should encode to empty")
+        end function
+
+        @it("encodes 'abcd:1234' correctly")
+        function test_standard_vector()
+            result = base64Encode("abcd:1234")
+            m.assertEqual(result, "YWJjZDoxMjM0", "standard username:password vector")
+        end function
+
+        @it("encodes single character")
+        function test_single_char()
+            result = base64Encode("A")
+            m.assertEqual(result, "QQ==", "single char with padding")
+        end function
+
+        @it("encodes two characters")
+        function test_two_chars()
+            result = base64Encode("AB")
+            m.assertEqual(result, "QUI=", "two chars with padding")
+        end function
+
+        @it("encodes three characters (no padding)")
+        function test_three_chars()
+            result = base64Encode("ABC")
+            m.assertEqual(result, "QUJD", "three chars no padding")
+        end function
+
+        @it("encodes lowercase letters")
+        function test_lowercase()
+            result = base64Encode("abc")
+            m.assertEqual(result, "YWJj", "lowercase letters")
+        end function
+
+        @it("encodes special characters")
+        function test_special_chars()
+            result = base64Encode("user@host")
+            m.assertEqual(result, "dXNlckBob3N0", "special chars including @")
+        end function
+
+        @it("encodes longer string")
+        function test_longer_string()
+            result = base64Encode("Hello, World!")
+            m.assertEqual(result, "SGVsbG8sIFdvcmxkIQ==", "mixed content with comma and exclamation")
+        end function
+
+    end class
+end namespace

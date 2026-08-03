@@ -1,0 +1,39 @@
+' Test rewriteURL(url, serverURL)
+namespace tests
+    @suite("Rewrite URL")
+    class RewriteURLTests extends rooibos.BaseTestSuite
+
+        @describe("rewriteURL unit tests")
+
+        @it("rewrites relative path with HTTP server")
+        function test_http_server()
+            result = rewriteURL("https://original.host/media/abc123/stream", "http://192.168.1.106:8945")
+            m.assertEqual(result, "http://192.168.1.106:8945/media/abc123/stream", "path extracted and prepended")
+        end function
+
+        @it("rewrites with HTTPS server")
+        function test_https_server()
+            result = rewriteURL("https://cdn.example.com/thumb.jpg", "https://roku.hartupee.com")
+            m.assertEqual(result, "https://roku.hartupee.com/thumb.jpg", "HTTPS preserved")
+        end function
+
+        @it("strips trailing slash from server URL")
+        function test_strips_trailing_slash()
+            result = rewriteURL("https://example.com/video.mp4", "http://server/")
+            m.assertEqual(result, "http://server/video.mp4", "trailing slash stripped and no double slash")
+        end function
+
+        @it("adds https when server URL has no protocol")
+        function test_adds_https()
+            result = rewriteURL("https://example.com/path/file.mp4", "naked-host.com")
+            m.assertTrue(Left(result, 8) = "https://", "https added")
+        end function
+
+        @it("returns URL unchanged when regex doesn't match")
+        function test_no_match()
+            result = rewriteURL("just-a-path", "http://server")
+            m.assertEqual(result, "just-a-path", "no match returns original")
+        end function
+
+    end class
+end namespace

@@ -1,0 +1,14 @@
+' Minimal smoke test — no utility function calls
+namespace tests
+    @suite("Smoke Tests")
+    class SmokeTests extends rooibos.BaseTestSuite
+
+        @describe("basic smoke tests")
+
+        @it("one equals one")
+        function test_basic_math()
+            m.assertEqual(1, 1, "basic math works")
+        end function
+
+    end class
+end namespace
