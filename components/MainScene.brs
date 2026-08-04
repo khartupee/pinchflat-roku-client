@@ -94,22 +94,31 @@ sub onFeedLoaded()
             m.launchBeaconFired = true
         end if
     else
-        ' Only clear the list and show empty state if the task has actually completed.
-        ' When errorMessage is set, the task ran and failed. When it's not set but content
-        ' is empty, the task may still be fetching — keep the old list visible to avoid flashing.
+        ' APITask returned empty content. If errorMessage was set (even to empty string),
+        ' the task completed — show the empty state. If not set, the task is still fetching.
         if m.apiTask <> invalid
             errMsg = m.apiTask.errorMessage
-            if errMsg <> invalid and errMsg <> ""
-                print "MainScene WARNING: APITask returned empty or invalid content."
-                ' Clear the old video list so stale videos don't remain visible
+            if errMsg <> invalid
+                print "MainScene: APITask completed with no videos."
+                ' Clear the old video list and source descriptions
                 if m.videoList <> invalid
                     m.videoList.content = CreateObject("roSGNode", "ContentNode")
                 end if
+                m.videoContent = CreateObject("roSGNode", "ContentNode")
+                m.sourceLookup = {}
                 m.feedLoaded = false
                 if m.emptyStateLabel <> invalid
-                    m.emptyStateLabel.text = "No videos found on server" + Chr(10) + m.serverURL
+                    if errMsg <> ""
+                        m.emptyStateLabel.text = "No videos found on server" + Chr(10) + m.serverURL
+                    else
+                        m.emptyStateLabel.text = "No videos on " + m.serverURL
+                    end if
                     m.emptyStateLabel.visible = true
                 end if
+                ' Clear preview area
+                if m.previewTitle <> invalid then m.previewTitle.text = ""
+                if m.previewDescription <> invalid then m.previewDescription.text = ""
+                if m.previewPoster <> invalid then m.previewPoster.uri = ""
             else
                 print "MainScene: APITask still fetching, keeping previous content visible."
             end if
@@ -458,7 +467,27 @@ sub removeVideoFromList(itemIndex as Integer)
     if m.videoContent <> invalid
         childNode = m.videoContent.GetChild(itemIndex)
         if childNode <> invalid
+            ' Remember the sourceId before removing, so we can clean up orphaned headers
+            removedSourceId = childNode.sourceId
+            removedIsHeader = childNode.isHeader
             m.videoContent.removeChild(childNode)
+
+            ' If a video was removed, check if its source header is now orphaned
+            if not removedIsHeader and removedSourceId <> invalid
+                removeOrphanedHeader(removedSourceId)
+            end if
+
+            ' If the list is now empty, show empty state
+            if m.videoContent.GetChildCount() = 0
+                m.sourceLookup = {}
+                if m.emptyStateLabel <> invalid
+                    m.emptyStateLabel.text = "No videos on " + m.serverURL
+                    m.emptyStateLabel.visible = true
+                end if
+                if m.previewTitle <> invalid then m.previewTitle.text = ""
+                if m.previewDescription <> invalid then m.previewDescription.text = ""
+                if m.previewPoster <> invalid then m.previewPoster.uri = ""
+            end if
         end if
     end if
 
@@ -472,6 +501,38 @@ sub removeVideoFromList(itemIndex as Integer)
     end if
 
     onVideoFocused()
+end sub
+
+' Remove a source header node if no remaining videos share its sourceId
+sub removeOrphanedHeader(sourceId as Integer)
+    if m.videoContent = invalid then return
+    count = m.videoContent.GetChildCount()
+    i = 0
+    while i < count
+        node = m.videoContent.GetChild(i)
+        if node <> invalid and node.isHeader and node.sourceId = sourceId
+            ' Check if any video with this sourceId still exists
+            hasVideos = false
+            j = 0
+            while j < count
+                sibling = m.videoContent.GetChild(j)
+                if sibling <> invalid and not sibling.isHeader and sibling.sourceId = sourceId
+                    hasVideos = true
+                    exit while
+                end if
+                j = j + 1
+            end while
+            if not hasVideos
+                m.videoContent.removeChild(node)
+                ' Removing the header shifts indices — don't increment i
+                count = count - 1
+            else
+                i = i + 1
+            end if
+        else
+            i = i + 1
+        end if
+    end while
 end sub
 
 sub playVideo(itemIndex as Integer)

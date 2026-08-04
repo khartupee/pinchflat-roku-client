@@ -1,3 +1,5 @@
+' Pure utility functions live in source/utils.brs (auto-included by Roku at runtime).
+
 sub init()
     m.top.functionName = "run"
 end sub
@@ -38,10 +40,10 @@ sub run()
     for each video in parsedJson
         if video.title <> invalid and video.id <> invalid
             streamUrl = ""
-            if video.stream_url <> invalid then streamUrl = rewriteURL(video.stream_url)
+            if video.stream_url <> invalid then streamUrl = rewriteURL(video.stream_url, m.top.serverURL)
             
             posterUrl = ""
-            if video.thumbnail_url <> invalid then posterUrl = rewriteURL(video.thumbnail_url)
+            if video.thumbnail_url <> invalid then posterUrl = rewriteURL(video.thumbnail_url, m.top.serverURL)
 
             desc = ""
             if video.description <> invalid then desc = cleanDescription(video.description)
@@ -78,6 +80,10 @@ sub run()
     end for
 
     print "APITask: Total compiled videos ready to send: "; videoList.Count()
+    ' Signal feed fetch is complete (empty string = no error; preserve if already set)
+    if m.top.errorMessage = "" or m.top.errorMessage = invalid
+        m.top.errorMessage = ""
+    end if
     m.top.content = videoList
 
     ' Fetch sources for header descriptions
@@ -115,12 +121,16 @@ sub run()
     end while
 end sub
 
+' =============================================================================
+' Utility functions — mirror of source/utils.brs (Roku components can't see source/ globals).
+' Keep these in sync with source/utils.brs for Rooibos tests.
+' =============================================================================
+
+' --- String Cleaning ---
+
 function cleanDescription(rawDesc as String) as String
     if rawDesc = "" or rawDesc = invalid then return ""
-
     desc = rawDesc
-
-    ' Split by newlines and take the first non-empty paragraph
     lines = desc.Split(chr(10))
     firstParagraph = ""
     for each line in lines
@@ -130,33 +140,24 @@ function cleanDescription(rawDesc as String) as String
             exit for
         end if
     end for
-
     if firstParagraph = ""
         return "No description available."
     end if
-
-    ' Strip URLs (http and https)
     urlRegex = CreateObject("roRegex", "https?://[^ ]+", "")
     firstParagraph = urlRegex.ReplaceAll(firstParagraph, "")
-
-    ' Collapse multiple spaces
     wsRegex = CreateObject("roRegex", "[ ]+", "")
     firstParagraph = wsRegex.ReplaceAll(firstParagraph, " ")
-
     firstParagraph = firstParagraph.Trim()
-
-    ' If remaining content is too short, it was just boilerplate
     if Len(firstParagraph) < 20
         return "No description available."
     end if
-
-    ' Truncate to 200 characters with ellipsis
     if Len(firstParagraph) > 200
         firstParagraph = Left(firstParagraph, 197) + "..."
     end if
-
     return firstParagraph
 end function
+
+' --- Date Formatting ---
 
 function formatDate(dateStr as String) as String
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -173,6 +174,8 @@ function formatDate(dateStr as String) as String
     return months[monthIndex] + " " + day + ", " + year
 end function
 
+' --- Duration Formatting ---
+
 function formatDuration(seconds as Integer) as String
     if seconds = 0 then return "0:00"
     hrs = seconds / 3600
@@ -183,6 +186,85 @@ function formatDuration(seconds as Integer) as String
     end if
     return Int(mins).ToStr() + ":" + Right("0" + Int(secs).ToStr(), 2)
 end function
+
+' --- Base64 Encoding ---
+
+function base64Encode(input as String) as String
+    b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    output = ""
+    i = 0
+    len = Len(input)
+    while i < len
+        b0 = 0
+        b1 = 0
+        b2 = 0
+        count = 0
+        if i < len
+            b0 = Asc(Mid(input, i + 1, 1))
+            i = i + 1
+            count = count + 1
+        end if
+        if i < len
+            b1 = Asc(Mid(input, i + 1, 1))
+            i = i + 1
+            count = count + 1
+        end if
+        if i < len
+            b2 = Asc(Mid(input, i + 1, 1))
+            i = i + 1
+            count = count + 1
+        end if
+        triple = (b0 * 65536) + (b1 * 256) + b2
+        c1 = Int(triple / 262144) Mod 64
+        c2 = Int(triple / 4096) Mod 64
+        c3 = Int(triple / 64) Mod 64
+        c4 = triple Mod 64
+        output = output + Mid(b64chars, c1 + 1, 1)
+        output = output + Mid(b64chars, c2 + 1, 1)
+        output = output + Mid(b64chars, c3 + 1, 1)
+        output = output + Mid(b64chars, c4 + 1, 1)
+        if count < 3
+            output = Left(output, Len(output) - (3 - count))
+            if count = 1 then output = output + "=="
+            if count = 2 then output = output + "="
+        end if
+    end while
+    return output
+end function
+
+' --- URL Rewriting ---
+
+function rewriteURL(url as String, serverURL as String) as String
+    if Left(serverURL, 7) <> "http://" and Left(serverURL, 8) <> "https://"
+        serverURL = "https://" + serverURL
+    end if
+    regex = CreateObject("roRegex", "^https?://[^/]+(/.*)$", "")
+    match = regex.Match(url)
+    if match.Count() > 1
+        path = match[1]
+        if Right(serverURL, 1) = "/"
+            serverURL = Left(serverURL, Len(serverURL) - 1)
+        end if
+        return serverURL + path
+    end if
+    return url
+end function
+
+' --- URL Sanitization ---
+
+function stripAuthFromURL(url as String) as String
+    if url = "" or url = invalid then return url
+    regex = CreateObject("roRegex", "^(https?)://[^@/]+@([^/].*)$", "")
+    match = regex.Match(url)
+    if match <> invalid and match.Count() >= 3
+        scheme = match[1]
+        rest = match[2]
+        return scheme + "://" + rest
+    end if
+    return url
+end function
+
+' =============================================================================
 
 sub onActionRequest(event as Object)
     requestData = event.GetData()
@@ -289,91 +371,4 @@ end function
 ' downloads use the synchronous GetToFile() instead. Thumbnails are small
 ' enough that the default timeout is not a practical concern.
 
-' Manual base64 encoding (EncodeData not available on all Roku firmware)
-function base64Encode(input as String) as String
-    b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    output = ""
-    i = 0
-    len = Len(input)
-
-    while i < len
-        ' Read up to 3 bytes
-        b0 = 0
-        b1 = 0
-        b2 = 0
-        count = 0
-
-        if i < len
-            b0 = Asc(Mid(input, i + 1, 1))
-            i = i + 1
-            count = count + 1
-        end if
-        if i < len
-            b1 = Asc(Mid(input, i + 1, 1))
-            i = i + 1
-            count = count + 1
-        end if
-        if i < len
-            b2 = Asc(Mid(input, i + 1, 1))
-            i = i + 1
-            count = count + 1
-        end if
-
-        ' Encode 3 bytes into 4 base64 characters
-        triple = (b0 * 65536) + (b1 * 256) + b2
-        c1 = Int(triple / 262144) Mod 64
-        c2 = Int(triple / 4096) Mod 64
-        c3 = Int(triple / 64) Mod 64
-        c4 = triple Mod 64
-        output = output + Mid(b64chars, c1 + 1, 1)
-        output = output + Mid(b64chars, c2 + 1, 1)
-        output = output + Mid(b64chars, c3 + 1, 1)
-        output = output + Mid(b64chars, c4 + 1, 1)
-
-        ' Add padding for incomplete groups
-        if count < 3
-            ' Remove the extra chars and add = padding
-            output = Left(output, Len(output) - (3 - count))
-            if count = 1 then output = output + "=="
-            if count = 2 then output = output + "="
-        end if
-    end while
-
-    return output
-end function
-
-function rewriteURL(url as String) as String
-    serverURL = m.top.serverURL
-
-    ' Add https:// if no protocol specified
-    if Left(serverURL, 7) <> "http://" and Left(serverURL, 8) <> "https://"
-        serverURL = "https://" + serverURL
-    end if
-
-    ' Extract path from the original URL (everything after the host:port) and prepend serverURL
-    regex = CreateObject("roRegex", "^https?://[^/]+(/.*)$", "")
-    match = regex.Match(url)
-    if match.Count() > 1
-        path = match[1]
-        if Right(serverURL, 1) = "/"
-            serverURL = Left(serverURL, Len(serverURL) - 1)
-        end if
-        return serverURL + path
-    end if
-
-    return url
-end function
-
-' Strip "user:pass@" from a URL for safe logging. Returns the URL unchanged if no credentials are present.
-function stripAuthFromURL(url as String) as String
-    if url = "" or url = invalid then return url
-    ' Match scheme://user:pass@host — if user:pass present, remove it
-    regex = CreateObject("roRegex", "^(https?)://[^@/]+@([^/].*)$", "")
-    match = regex.Match(url)
-    if match <> invalid and match.Count() >= 3
-        scheme = match[1]
-        rest = match[2]
-        return scheme + "://" + rest
-    end if
-    return url
-end function
+' --- base64Encode, rewriteURL, stripAuthFromURL are in source/utils.brs (tested by Rooibos). ---

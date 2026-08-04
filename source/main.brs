@@ -1,5 +1,7 @@
 sub Main()
+    ' Guard: exit silently when roSGScreen is unavailable (test environment)
     screen = CreateObject("roSGScreen")
+    if screen = invalid then return
     port = CreateObject("roMessagePort")
     screen.SetMessagePort(port)
     screen.CreateScene("MainScene")
