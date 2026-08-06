@@ -1,14 +1,14 @@
 {
   "rootDir": ".",
+  "out": "out",
   "files": [
     "manifest",
     "source/**/*",
     "components/**/*",
-    "images/**/*"
+    "images/**/*",
+    "!source/tests/**/*"
   ],
-  "plugins": [
-    "rooibos-roku"
-  ],
+  "plugins": [],
   "allowBrighterScriptInBrightScript": true,
   "diagnosticProjectReferences": false,
   "diagnosticFilters": [

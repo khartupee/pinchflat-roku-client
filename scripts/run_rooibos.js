@@ -28,7 +28,7 @@ console.log(`Running Rooibos tests on Roku at ${rokuIp} ...`);
 
 try {
   execSync(
-    `npx rooibos --project=bsconfig.json --host=${rokuIp} --password=${rokuPw}`,
+    `npx rooibos --project=bsconfig.test.json --host=${rokuIp} --password=${rokuPw}`,
     { cwd: root, stdio: "inherit" }
   );
 } catch (err) {

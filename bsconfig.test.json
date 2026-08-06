@@ -1,0 +1,12 @@
+{
+  "extends": "./bsconfig.json",
+  "files": [
+    "manifest",
+    "source/**/*",
+    "components/**/*",
+    "images/**/*"
+  ],
+  "plugins": [
+    "rooibos-roku"
+  ]
+}
