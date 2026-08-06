@@ -1,0 +1,230 @@
+' Pure utility functions live in source/utils.bs (imported via BrighterScript).
+import "../source/utils.bs"
+
+sub init()
+    m.top.functionName = "run"
+end sub
+
+sub run()
+    print "APITask: Starting feed fetch..."
+    
+    ' Fetch JSON API containing all videos
+    jsonUrl = m.top.serverURL + "/api/v1/videos"
+    jsonTransfer = CreateObject("roUrlTransfer")
+    setupAuth(jsonTransfer)
+    jsonTransfer.SetUrl(jsonUrl)
+    jsonResponse = asyncGetToString(jsonTransfer, 10000)
+    print "APITask: JSON response length: "; Len(jsonResponse)
+    
+    parsedJson = ParseJson(jsonResponse)
+    if parsedJson = invalid or jsonResponse = ""
+        ' API call failed - check if server is reachable but running wrong version
+        checkTransfer = CreateObject("roUrlTransfer")
+        setupAuth(checkTransfer)
+        checkTransfer.SetUrl(m.top.serverURL + "/healthcheck")
+        checkResponse = asyncGetToString(checkTransfer, 10000)
+
+        if checkResponse <> "" and checkResponse <> invalid
+            ' Server responded to healthcheck - it's Pinchflat but missing Roku API or auth failed
+            m.top.errorMessage = "AUTH_REQUIRED"
+        else
+            ' Server unreachable or not Pinchflat
+            errorMsg = "Could not connect to server at " + m.top.serverURL + Chr(10) + Chr(10) + "Please check your server URL in Settings."
+            m.top.errorMessage = errorMsg
+        end if
+
+        print "APITask ERROR: "; m.top.errorMessage
+        parsedJson = []
+    end if
+
+    videoList = []
+    for each video in parsedJson
+        if video.title <> invalid and video.id <> invalid
+            streamUrl = ""
+            if video.stream_url <> invalid then streamUrl = rewriteURL(video.stream_url, m.top.serverURL)
+            
+            posterUrl = ""
+            if video.thumbnail_url <> invalid then posterUrl = rewriteURL(video.thumbnail_url, m.top.serverURL)
+
+            desc = ""
+            if video.description <> invalid then desc = cleanDescription(video.description)
+
+            playPos = 0
+            if video.playback_position_seconds <> invalid then playPos = Int(video.playback_position_seconds)
+
+            vidDur = 0
+            if video.duration_seconds <> invalid then vidDur = Int(video.duration_seconds)
+
+            srcName = ""
+            if video.source_name <> invalid then srcName = video.source_name
+
+            srcId = 0
+            if video.source_id <> invalid then srcId = video.source_id
+
+            uploadDate = ""
+            if video.uploaded_at <> invalid then uploadDate = formatDate(video.uploaded_at)
+
+            videoList.Push({
+                title: video.title
+                url: streamUrl
+                id: video.id
+                description: desc
+                SDPosterUrl: posterUrl
+                HDPosterUrl: posterUrl
+                playbackPosition: playPos
+                durationSeconds: vidDur
+                sourceName: srcName
+                sourceId: srcId
+                uploadDate: uploadDate
+            })
+        end if
+    end for
+
+    print "APITask: Total compiled videos ready to send: "; videoList.Count()
+    ' Signal feed fetch is complete (empty string = no error; preserve if already set)
+    if m.top.errorMessage = "" or m.top.errorMessage = invalid
+        m.top.errorMessage = ""
+    end if
+    m.top.content = videoList
+
+    ' Fetch sources for header descriptions
+    sourcesUrl = m.top.serverURL + "/api/v1/sources"
+    sourcesTransfer = CreateObject("roUrlTransfer")
+    setupAuth(sourcesTransfer)
+    sourcesTransfer.SetUrl(sourcesUrl)
+    sourcesResponse = asyncGetToString(sourcesTransfer, 10000)
+    if sourcesResponse <> "" and sourcesResponse <> invalid
+        sourcesJson = ParseJson(sourcesResponse)
+        if sourcesJson <> invalid
+            m.top.sources = sourcesJson
+            print "APITask: Loaded "; sourcesJson.Count(); " sources."
+        end if
+    end if
+
+    ' Set up scoped observers for action and thumbnail requests (runs in Task thread)
+    m.port = CreateObject("roMessagePort")
+    m.top.observeFieldScoped("actionRequest", m.port)
+    m.top.observeFieldScoped("thumbnailRequest", m.port)
+
+    ' Keep Task alive to handle action and thumbnail requests
+    while true
+        msg = wait(0, m.port)
+        if msg <> invalid
+            if type(msg) = "roSGNodeEvent"
+                field = msg.getField()
+                if field = "actionRequest"
+                    onActionRequest(msg)
+                else if field = "thumbnailRequest"
+                    onThumbnailRequest(msg)
+                end if
+            end if
+        end if
+    end while
+end sub
+
+sub onActionRequest(event as Object)
+    requestData = event.GetData()
+    if requestData = invalid then return
+
+    actionType = requestData.type
+    videoId = requestData.videoId
+
+    if actionType = "delete"
+        url = m.top.serverURL + "/api/v1/videos/" + videoId
+        print "APITask: DELETE "; stripAuthFromURL(url)
+        request = CreateObject("roUrlTransfer")
+        setupAuth(request)
+        request.SetUrl(url)
+        request.SetRequest("DELETE")
+        response = asyncPostFromString(request, "", 5000)
+        print "APITask: DELETE response code: "; response
+    else if actionType = "ignore"
+        url = m.top.serverURL + "/api/v1/videos/" + videoId + "/ignore"
+        print "APITask: POST "; stripAuthFromURL(url)
+        request = CreateObject("roUrlTransfer")
+        setupAuth(request)
+        request.SetUrl(url)
+        request.SetRequest("POST")
+        response = asyncPostFromString(request, "", 5000)
+        print "APITask: POST response code: "; response
+    else if actionType = "save_progress"
+        position = requestData.position
+        if position = invalid then position = 0
+        url = m.top.serverURL + "/api/v1/videos/" + videoId + "/progress"
+        print "APITask: PATCH progress "; stripAuthFromURL(url); " position="; position
+        request = CreateObject("roUrlTransfer")
+        setupAuth(request)
+        request.SetUrl(url)
+        request.SetRequest("PATCH")
+        request.AddHeader("Content-Type", "application/json")
+        response = asyncPostFromString(request, "{""position"":" + position.toStr() + "}", 5000)
+    end if
+end sub
+
+sub onThumbnailRequest(event as Object)
+    request = event.GetData()
+    if request = invalid then return
+
+    url = request.url
+    videoId = request.id
+    if url = "" or url = invalid then return
+    if videoId = "" or videoId = invalid then return
+
+    localPath = "tmp:/thumb_" + videoId + ".jpg"
+    transfer = CreateObject("roUrlTransfer")
+    setupAuth(transfer)
+    transfer.SetUrl(url)
+    transfer.GetToFile(localPath)
+
+    m.top.thumbnailResult = { localPath: localPath, id: videoId }
+end sub
+
+' Adds Basic Auth header to a roUrlTransfer if credentials are configured.
+' Does nothing if username is empty (basic auth not configured).
+sub setupAuth(request as Object)
+    username = m.top.basicAuthUsername
+    if username = "" or username = invalid then return
+
+    password = m.top.basicAuthPassword
+    if password = invalid then password = ""
+
+    ' Build base64-encoded "username:password"
+    credentials = username + ":" + password
+    b64 = base64Encode(credentials)
+
+    request.AddHeader("Authorization", "Basic " + b64)
+end sub
+
+' --- Async helpers for timeout control ---
+' roUrlTransfer.SetTimeout() is not available on all Roku firmware, so we use
+' Async* APIs + wait() + AsyncCancel() to enforce a custom timeout.
+
+function asyncGetToString(transfer as Object, timeoutMs as Integer) as String
+    port = CreateObject("roMessagePort")
+    transfer.SetMessagePort(port)
+    transfer.AsyncGetToString()
+    msg = wait(timeoutMs, port)
+    if msg = invalid
+        transfer.AsyncCancel()
+        return ""
+    end if
+    return msg.GetString()
+end function
+
+function asyncPostFromString(transfer as Object, body as String, timeoutMs as Integer) as String
+    port = CreateObject("roMessagePort")
+    transfer.SetMessagePort(port)
+    transfer.AsyncPostFromString(body)
+    msg = wait(timeoutMs, port)
+    if msg = invalid
+        transfer.AsyncCancel()
+        return ""
+    end if
+    return msg.GetString()
+end function
+
+' Note: AsyncGetToFile() is not available on all Roku firmware, so thumbnail
+' downloads use the synchronous GetToFile() instead. Thumbnails are small
+' enough that the default timeout is not a practical concern.
+
+' --- base64Encode, rewriteURL, stripAuthFromURL are in source/utils.bs (tested by Rooibos). ---
