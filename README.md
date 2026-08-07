@@ -40,6 +40,7 @@ Three layout modes selectable from **Settings → Change Layout**:
   * **Play:** Play the highlighted video.
   * **Delete File:** Requests the server to delete both the database entry and the physical files on disk, freeing up host storage.
   * **Delete & Ignore:** Deletes the video files and registers a filter ignore-rule on the server to prevent yt-dlp from re-downloading it in future feed sweeps.
+  * **Refresh Feed:** Fetches the latest video list from the server without requiring an app restart. Useful when new content has been downloaded while you're browsing, or after deleting videos and wanting to check for new arrivals.
   * **Settings:** Opens the Settings dialog.
   * **Cancel:** Close the menu.
 
@@ -92,7 +93,7 @@ To maintain high responsiveness, the client implements a **lazy-loading thumbnai
 
 ## 🧪 Testing
 
-The project includes a **Rooibos on-device test suite** with 35 tests covering all utility functions.
+The project includes a **Rooibos on-device test suite** with 35 tests covering all utility functions. The same source code is used for both testing and production deployment — no duplicate utility files are needed. BrighterScript (`.bs`) handles imports correctly in both modes.
 
 ### Quick start
 
@@ -104,7 +105,7 @@ npm test             # Compile + deploy + run tests on your Roku
 
 Tests read Roku credentials from `.env` (copy `.env.example` → `.env` and fill in your values).
 
-See [DEV_EXPERIENCE_PLAN.md](DEV_EXPERIENCE_PLAN.md) and [TEST_PLAN_BRIGHTSCRIPT.md](TEST_PLAN_BRIGHTSCRIPT.md) for full details.
+See [TEST_PLAN_BRIGHTSCRIPT.md](TEST_PLAN_BRIGHTSCRIPT.md) for full details.
 
 ---
 

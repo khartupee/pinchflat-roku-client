@@ -776,7 +776,7 @@ sub showOptionsMenu()
     dialog = CreateObject("roSGNode", "StandardMessageDialog")
     dialog.title = "Pinchflat"
     dialog.message = [m.serverURL]
-    dialog.buttons = ["Play", "Delete File", "Delete & Ignore", "Settings", "Cancel"]
+    dialog.buttons = ["Play", "Delete File", "Delete & Ignore", "Refresh Feed", "Settings", "Cancel"]
 
     if m.videoList <> invalid and m.videoContent <> invalid
         focusedIndex = m.videoList.itemFocused
@@ -814,6 +814,8 @@ sub onMenuSelected()
     else if buttonIndex = 2
         if itemIndex <> invalid and videoId <> invalid then deleteAndIgnoreVideoFromServer(itemIndex, videoId)
     else if buttonIndex = 3
+        loadFeed()
+    else if buttonIndex = 4
         showSettingsDialog()
     end if
 end sub

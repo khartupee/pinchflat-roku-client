@@ -27,7 +27,7 @@ Test specs live in `source/tests/` with a `.spec.bs` extension. This location is
 
 ```
 source/
-├── utils.brs              # Pure utility functions (tested)
+├── utils.bs               # Pure utility functions (tested)
 ├── tests/                 # Rooibos test specs
 │   ├── smoke.spec.bs
 │   ├── base64.spec.bs
@@ -45,7 +45,9 @@ BrighterScript only includes files matching its `files` glob in `bsconfig.json`.
 
 ### Utility Function Separation
 
-Pure logic functions (base64 encoding, URL manipulation, date/duration formatting, description cleaning) live in `source/utils.brs`. They have no Roku object dependencies, making them ideal for unit testing. `APITask.brs` calls these functions at runtime.
+Pure logic functions (base64 encoding, URL manipulation, date/duration formatting, description cleaning) live in `source/utils.bs`. They have no Roku object dependencies, making them ideal for unit testing. `APITask.bs` imports these functions at runtime using BrighterScript `import` statements.
+
+**Unified codebase:** Originally, utility functions had to be duplicated — one copy for tests and one for production — because plain BrightScript (`.brs`) couldn't share code across test and deployment builds. Migrating to BrighterScript (`.bs`) eliminated the duplication. The same `source/utils.bs` file is now used by both `npm test` and `deploy.sh`. No duplicate files are needed.
 
 ---
 

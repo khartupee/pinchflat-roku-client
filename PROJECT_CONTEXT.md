@@ -156,4 +156,4 @@ When generating, refactoring, or inspecting code across this workspace, strictly
     - Preflight check: `npm run check` validates Node.js, dependencies, and `.env` configuration.
     - Test files use `@suite`, `@describe`, and `@it` decorators — all three are mandatory (missing `@suite` means zero discovery; missing `@describe` causes compile-time crash).
     - BrightScript strings do NOT have `.Contains()` or `.StartsWith()` — use `InStr()` and `Left()` instead.
-    - See [DEV_EXPERIENCE_PLAN.md](pinchflat-roku-client/DEV_EXPERIENCE_PLAN.md) and [TEST_PLAN_BRIGHTSCRIPT.md](pinchflat-roku-client/TEST_PLAN_BRIGHTSCRIPT.md) for full details.
+    - See [TEST_PLAN_BRIGHTSCRIPT.md](pinchflat-roku-client/TEST_PLAN_BRIGHTSCRIPT.md) for full details.
